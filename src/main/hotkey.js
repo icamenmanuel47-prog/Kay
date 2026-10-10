@@ -1,103 +1,99 @@
-const { globalShortcut, app } = require('electron');
-const { getSetting, setSetting } = require('./settings');
-const { showWindow, hideWindow, toggleWindow, getWindow } = require('./window');
+const { globalShortcut } = require('electron');
+const { setSetting } = require('./settings');
+const { toggleWindow, getWindow } = require('./window');
+const {
+  parseHotkey,
+  toAccelerator,
+  isSafeGlobalHotkey,
+  matchesUiohookHotkey,
+  resolveUiohookKey,
+} = require('./hotkey-logic');
 
-let uiohook = null;
+let uiohookModule = null;
 let useUiohook = false;
 let currentHotkey = 'Ctrl+Shift+M';
 let isRegistered = false;
 
 /**
- * Parse hotkey string to uiohook format
- * e.g., "Ctrl+Shift+M" -> { ctrl: true, shift: true, key: 'm' }
+ * Why the most recent registration attempt failed. Read by updateHotkey so the
+ * UI can say something more useful than "failed".
+ * One of: null | 'unsafe' | 'unsupported-key' | 'in-use'.
  */
-function parseHotkey(hotkeyStr) {
-  const parts = hotkeyStr.toLowerCase().split('+');
-  const result = { ctrl: false, alt: false, shift: false, meta: false, key: '' };
-
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (trimmed === 'ctrl' || trimmed === 'control') result.ctrl = true;
-    else if (trimmed === 'alt') result.alt = true;
-    else if (trimmed === 'shift') result.shift = true;
-    else if (trimmed === 'meta' || trimmed === 'cmd' || trimmed === 'command') result.meta = true;
-    else result.key = trimmed;
-  }
-
-  return result;
-}
+let lastFailureReason = null;
 
 /**
- * Convert hotkey to Electron accelerator format
+ * Which mechanism is currently active - 'uiohook', 'globalShortcut' or null.
+ * Exposed for diagnostics.
  */
-function toAccelerator(hotkeyStr) {
-  const parts = hotkeyStr.split('+').map(p => p.trim());
-  const key = parts.pop();
-  const mods = parts.map(p => {
-    const lower = p.toLowerCase();
-    if (lower === 'ctrl' || lower === 'control') return 'Control';
-    if (lower === 'alt') return 'Alt';
-    if (lower === 'shift') return 'Shift';
-    if (lower === 'meta' || lower === 'cmd' || lower === 'command') return 'Command';
-    return p;
-  });
-  return [...mods, key.toUpperCase()].join('+');
-}
+let registrationMethod = null;
 
 /**
- * Register hotkey using uiohook-napi (doesn't swallow keys)
+ * Register the hotkey with uiohook-napi.
+ *
+ * Preferred, because uiohook listens at the OS level without consuming the
+ * keystroke, so Ctrl+Shift+M still reaches whatever app has focus.
+ *
+ * @returns {boolean} true when uiohook is now listening
  */
-function registerWithUiohook(hotkeyStr) {
+function registerWithUiohook(hotkeyStr, parsed) {
   try {
-    if (!uiohook) {
-      uiohook = require('uiohook-napi');
+    if (!uiohookModule) {
+      uiohookModule = require('uiohook-napi');
     }
-
-    const parsed = parseHotkey(hotkeyStr);
-
-    // Remove existing listener if any
-    if (useUiohook) {
-      uiohook.removeAllListeners('keydown');
-    }
-
-    uiohook.on('keydown', (e) => {
-      // Check if this matches our hotkey
-      const match =
-        (!parsed.ctrl || e.ctrlKey) &&
-        (!parsed.alt || e.altKey) &&
-        (!parsed.shift || e.shiftKey) &&
-        (!parsed.meta || e.metaKey) &&
-        e.key.toLowerCase() === parsed.key.toLowerCase();
-
-      if (match) {
-        // Don't prevent default - let the key pass through
-        toggleWindow();
-      }
-    });
-
-    uiohook.start();
-    useUiohook = true;
-    console.log(`[Hotkey] Registered via uiohook: ${hotkeyStr}`);
-    return true;
   } catch (error) {
-    console.warn('[Hotkey] uiohook registration failed, falling back to Electron globalShortcut:', error.message);
     useUiohook = false;
-    if (uiohook) {
-      try {
-        uiohook.stop();
-      } catch (e) {}
-      uiohook = null;
-    }
+    console.warn('[Hotkey] uiohook-napi unavailable, falling back to Electron globalShortcut:', error.message);
     return false;
   }
+
+  const { uIOhook, UiohookKey } = uiohookModule;
+  if (typeof uIOhook?.on !== 'function') {
+    useUiohook = false;
+    console.warn('[Hotkey] uiohook-napi did not expose an emitter; falling back to globalShortcut');
+    return false;
+  }
+
+  const keycode = resolveUiohookKey(parsed.key, UiohookKey);
+  if (keycode === undefined) {
+    useUiohook = false;
+    lastFailureReason = 'unsupported-key';
+    console.warn(`[Hotkey] uiohook has no keycode for "${parsed.key}"`);
+    return false;
+  }
+
+  // uIOhook is a process-wide singleton - always detach before re-attaching.
+  uIOhook.removeAllListeners('keydown');
+  uIOhook.on('keydown', (event) => {
+    if (matchesUiohookHotkey(parsed, event, UiohookKey)) {
+      // Intentionally no preventDefault: the keystroke passes through to the
+      // focused application, which is the whole point of using uiohook.
+      toggleWindow();
+    }
+  });
+
+  uIOhook.start();
+  useUiohook = true;
+  console.log(`[Hotkey] Registered via uiohook: ${hotkeyStr}`);
+  return true;
 }
 
 /**
- * Register hotkey using Electron's globalShortcut (fallback)
+ * Register the hotkey with Electron's globalShortcut.
+ *
+ * Fallback path. Note that this consumes the accelerator system-wide while
+ * registered - it will not reach other applications.
+ *
+ * @returns {boolean} true when the accelerator was claimed
  */
 function registerWithElectron(hotkeyStr) {
   try {
     const accelerator = toAccelerator(hotkeyStr);
+    if (!accelerator) {
+      lastFailureReason = 'unsupported-key';
+      console.error(`[Hotkey] Cannot build an accelerator from "${hotkeyStr}"`);
+      return false;
+    }
+
     const success = globalShortcut.register(accelerator, () => {
       toggleWindow();
     });
@@ -105,68 +101,97 @@ function registerWithElectron(hotkeyStr) {
     if (success) {
       console.log(`[Hotkey] Registered via Electron globalShortcut: ${accelerator}`);
       return true;
-    } else {
-      console.error(`[Hotkey] Failed to register: ${accelerator} (may be in use)`);
-      return false;
     }
+
+    lastFailureReason = 'in-use';
+    console.error(`[Hotkey] Failed to register: ${accelerator} (may be in use)`);
+    return false;
   } catch (error) {
+    lastFailureReason = 'in-use';
     console.error('[Hotkey] Electron globalShortcut error:', error.message);
     return false;
   }
 }
 
 /**
- * Register the global hotkey
+ * Register the global hotkey.
+ *
+ * Reports success honestly: isRegistered is only true when a mechanism
+ * actually claimed the hotkey, so updateHotkey's revert path really fires.
+ *
+ * @returns {boolean}
  */
 function registerHotkey(hotkeyStr) {
   if (!hotkeyStr) hotkeyStr = 'Ctrl+Shift+M';
   currentHotkey = hotkeyStr;
+  lastFailureReason = null;
+  registrationMethod = null;
 
   // Unregister existing first
   unregisterHotkey();
 
-  // Try uiohook first (preferred - doesn't swallow keys)
-  const uiohookSuccess = registerWithUiohook(hotkeyStr);
-
-  if (!uiohookSuccess) {
-    // Fallback to Electron's globalShortcut
-    registerWithElectron(hotkeyStr);
+  const parsed = parseHotkey(hotkeyStr);
+  if (!isSafeGlobalHotkey(parsed)) {
+    // A bare character would fire on every matching keystroke in every app,
+    // in either mechanism. Refuse rather than silently hijack typing.
+    lastFailureReason = 'unsafe';
+    isRegistered = false;
+    console.warn(`[Hotkey] Refusing "${hotkeyStr}": global hotkeys need a modifier key or a function key`);
+    return false;
   }
 
-  isRegistered = true;
+  let success = registerWithUiohook(hotkeyStr, parsed);
+  if (success) {
+    registrationMethod = 'uiohook';
+  } else {
+    success = registerWithElectron(hotkeyStr);
+    registrationMethod = success ? 'globalShortcut' : null;
+  }
+
+  isRegistered = success;
+  if (!success && !lastFailureReason) lastFailureReason = 'in-use';
   return isRegistered;
 }
 
 /**
- * Unregister the global hotkey
+ * Unregister the global hotkey.
  */
 function unregisterHotkey() {
-  if (useUiohook && uiohook) {
+  if (useUiohook && uiohookModule?.uIOhook) {
     try {
-      uiohook.stop();
-      uiohook.removeAllListeners('keydown');
-      useUiohook = false;
+      uiohookModule.uIOhook.stop();
+      uiohookModule.uIOhook.removeAllListeners('keydown');
       console.log('[Hotkey] uiohook unregistered');
     } catch (error) {
       console.warn('[Hotkey] uiohook unregister error:', error.message);
     }
+    useUiohook = false;
   }
 
   try {
     globalShortcut.unregisterAll();
-    console.log('[Hotkey] Electron globalShortcut unregistered all');
   } catch (error) {
     console.warn('[Hotkey] Electron unregister error:', error.message);
   }
 
   isRegistered = false;
+  registrationMethod = null;
 }
 
 /**
- * Update the hotkey (unregister old, register new)
+ * Update the hotkey (unregister old, register new).
+ *
+ * On failure the previous hotkey is re-registered and the reason is returned,
+ * so the settings UI can tell the user what went wrong instead of claiming
+ * success.
+ *
+ * @param {string} newHotkey
+ * @returns {{success: boolean, hotkey: string, reason: string|null}}
  */
 function updateHotkey(newHotkey) {
-  if (!newHotkey) return false;
+  if (!newHotkey) {
+    return { success: false, hotkey: currentHotkey, reason: 'invalid' };
+  }
 
   const oldHotkey = currentHotkey;
   currentHotkey = newHotkey;
@@ -176,22 +201,24 @@ function updateHotkey(newHotkey) {
 
   if (success) {
     setSetting('hotkey', newHotkey);
-    // Notify renderer
     const win = getWindow();
     if (win) {
       win.webContents.send('hotkey:changed', newHotkey);
     }
-  } else {
-    // Revert on failure
-    currentHotkey = oldHotkey;
-    registerHotkey(oldHotkey);
+    return { success: true, hotkey: newHotkey, reason: null };
   }
 
-  return success;
+  const reason = lastFailureReason || 'in-use';
+
+  // Revert to the hotkey that was working before.
+  currentHotkey = oldHotkey;
+  registerHotkey(oldHotkey);
+
+  return { success: false, hotkey: oldHotkey, reason };
 }
 
 /**
- * Get current hotkey
+ * Get the current hotkey
  */
 function getHotkey() {
   return currentHotkey;
@@ -211,6 +238,13 @@ function getHotkeyDisplay() {
   return currentHotkey;
 }
 
+/**
+ * Diagnostic: which mechanism is holding the hotkey right now.
+ */
+function getRegistrationInfo() {
+  return { hotkey: currentHotkey, registered: isRegistered, method: registrationMethod };
+}
+
 module.exports = {
   registerHotkey,
   unregisterHotkey,
@@ -218,6 +252,7 @@ module.exports = {
   getHotkey,
   isHotkeyRegistered,
   getHotkeyDisplay,
+  getRegistrationInfo,
   parseHotkey,
   toAccelerator,
 };

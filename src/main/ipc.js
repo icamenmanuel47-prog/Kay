@@ -123,8 +123,10 @@ function setupIpc() {
   });
 
   ipcMain.handle('settings:set-hotkey', (_, hotkey) => {
-    const success = updateHotkey(hotkey);
-    return { success, hotkey };
+    // updateHotkey returns { success, hotkey, reason } - pass the reason through
+    // so the settings UI can say what actually went wrong.
+    const result = updateHotkey(hotkey);
+    return { success: result.success, hotkey: result.hotkey, reason: result.reason };
   });
 
   ipcMain.handle('settings:encryption-available', () => {

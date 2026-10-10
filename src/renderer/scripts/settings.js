@@ -363,12 +363,37 @@ function stopHotkeyRecording() {
 function handleGlobalHotkey(event) {
   if (!isHotkeyRecording) return;
 
+  // A bare letter can never be a *global* hotkey - the main process would fire
+  // it every time that key is pressed in any application - so keep recording
+  // instead of submitting it. Function keys are the modifier-less exception.
+  const hasModifier = event.ctrlKey || event.altKey || event.shiftKey || event.metaKey;
+  const isFunctionKey = /^f([1-9]|1[0-9]|2[0-4])$/i.test(event.key);
+  if (!hasModifier && !isFunctionKey) return;
+
   const hotkey = parseHotkey(event);
   if (hotkey && hotkey !== 'Ctrl' && hotkey !== 'Alt' && hotkey !== 'Shift' && hotkey !== 'Meta') {
     event.preventDefault();
     elements.hotkeyInput.value = hotkey;
     applyHotkey(hotkey);
     stopHotkeyRecording();
+  }
+}
+
+/**
+ * Turn a failure reason from the main process into something worth showing.
+ */
+function describeHotkeyFailure(reason) {
+  switch (reason) {
+    case 'unsafe':
+      return 'Hotkeys need a modifier key (Ctrl, Alt, Shift) or a function key';
+    case 'unsupported-key':
+      return "That key can't be used as a global hotkey";
+    case 'in-use':
+      return 'Hotkey may be in use by another app';
+    case 'invalid':
+      return 'Invalid hotkey';
+    default:
+      return 'Failed to set hotkey';
   }
 }
 
@@ -396,7 +421,7 @@ async function applyHotkey(hotkey) {
       updateHotkeyDisplay(hotkey);
       showToast('Hotkey updated', 'success');
     } else {
-      showToast('Failed to set hotkey (may be in use)', 'error');
+      showToast(describeHotkeyFailure(result.reason), 'error');
       // Revert
       elements.hotkeyInput.value = currentSettings.hotkey;
     }

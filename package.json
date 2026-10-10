@@ -28,7 +28,8 @@
     "electron-updater": "^6.3.0",
     "highlight.js": "^11.10.0",
     "katex": "^0.16.11",
-    "marked": "^14.1.0"
+    "marked": "^14.1.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "electron": "^31.0.0",
