@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { createTrailingThrottle } = require('./throttle');
+const { isValidConversationId, pickUpdatableFields } = require('./conversation-fields');
 
 const CONVERSATIONS_DIR = path.join(app.getPath('userData'), 'kay', 'conversations');
 
@@ -23,6 +24,12 @@ function ensureDir() {
 }
 
 function getConversationPath(id) {
+  // `id` is renderer-supplied for get/update/delete/export, so it must never
+  // reach path.join unvalidated - see conversation-fields.js. Callers all
+  // catch, so a bad id surfaces as a normal error response.
+  if (!isValidConversationId(id)) {
+    throw new Error('Invalid conversation id');
+  }
   return path.join(CONVERSATIONS_DIR, `${id}.json`);
 }
 
@@ -115,8 +122,9 @@ function setupConversations() {
       const conversation = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       const updated = {
         ...conversation,
-        ...data,
+        ...pickUpdatableFields(data), // only title/model/messages, type-checked
         id, // Preserve ID
+        createdAt: conversation.createdAt, // Preserve creation time
         updatedAt: new Date().toISOString(),
       };
       fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));

@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Everything the renderer loads is shipped inside the app (see src/renderer/vendor),
+    so the policy can be tight. 'unsafe-inline' on style-src is required because the
+    UI sets element styles directly; scripts are never inline.
+    Remote https: images are allowed so model answers can embed diagrams.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Kay - Personal Assistant</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/components.css">
@@ -365,7 +372,7 @@
   <script src="vendor/purify.min.js"></script>
   <script src="vendor/katex/katex.min.js"></script>
   <script src="vendor/katex/auto-render.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
 
   <!-- Load app scripts as ES modules -->
   <script type="module" src="scripts/app.js"></script>
