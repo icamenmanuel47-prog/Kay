@@ -75,6 +75,7 @@ export async function initSettings() {
 function cacheElements() {
   elements.modal = $('#settingsModal');
   elements.modalContent = $('#settingsModalContent');
+  elements.openBtn = $('#settingsBtn');
   elements.closeBtn = $('#closeSettingsBtn');
   elements.saveBtn = $('#saveSettingsBtn');
 
@@ -126,6 +127,7 @@ function cacheElements() {
 
 function bindEvents() {
   // Modal open/close
+  elements.openBtn?.addEventListener('click', openModal);
   elements.closeBtn?.addEventListener('click', closeModal);
   elements.saveBtn?.addEventListener('click', saveAndClose);
   elements.modal?.addEventListener('click', (e) => {
