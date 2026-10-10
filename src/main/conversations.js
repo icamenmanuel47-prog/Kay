@@ -2,8 +2,18 @@ const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+const { createTrailingThrottle } = require('./throttle');
 
 const CONVERSATIONS_DIR = path.join(app.getPath('userData'), 'kay', 'conversations');
+
+// How often a streamed assistant message is allowed to hit disk. Persisting
+// every chunk meant a full read/parse/stringify/write of the whole
+// conversation once per token - quadratic work that visibly stuttered on long
+// threads and wore the disk for no benefit.
+const STREAM_PERSIST_INTERVAL_MS = 300;
+
+/** @type {Map<string, ReturnType<typeof createTrailingThrottle>>} */
+const pendingAssistantWrites = new Map();
 
 // Ensure conversations directory exists
 function ensureDir() {
@@ -285,6 +295,86 @@ function updateLastAssistantMessage(conversationId, content) {
   }
 }
 
+function getAssistantThrottle(conversationId) {
+  let throttle = pendingAssistantWrites.get(conversationId);
+  if (!throttle) {
+    throttle = createTrailingThrottle(
+      (id, content) => updateLastAssistantMessage(id, content),
+      STREAM_PERSIST_INTERVAL_MS,
+    );
+    pendingAssistantWrites.set(conversationId, throttle);
+  }
+  return throttle;
+}
+
+/**
+ * Queue a persist of a streaming assistant message.
+ *
+ * Empty content is ignored: there is nothing to write, and it must never
+ * replace the pending real content.
+ *
+ * @param {string} conversationId
+ * @param {string} content full message text so far
+ */
+function scheduleAssistantUpdate(conversationId, content) {
+  if (!content) return;
+  getAssistantThrottle(conversationId).invoke(conversationId, content);
+}
+
+/**
+ * Persist a streaming assistant message immediately and stop any queued write.
+ *
+ * Must be used on every terminal path (stream end, cancel, error) so the
+ * final text is never lost to a queued write holding older content.
+ *
+ * @param {string} conversationId
+ * @param {string} content final message text
+ * @returns {boolean} whether a write happened
+ */
+function finalizeAssistantUpdate(conversationId, content) {
+  const throttle = pendingAssistantWrites.get(conversationId);
+  if (throttle) {
+    throttle.cancel();
+    pendingAssistantWrites.delete(conversationId);
+  }
+  if (!content) return false;
+  return updateLastAssistantMessage(conversationId, content);
+}
+
+/**
+ * Drop any queued write without persisting it.
+ *
+ * Used when the placeholder assistant message is about to be removed, so a
+ * trailing timer cannot resurrect it afterwards.
+ *
+ * @param {string} conversationId
+ * @returns {boolean} whether a queued write was discarded
+ */
+function cancelPendingAssistantUpdate(conversationId) {
+  const throttle = pendingAssistantWrites.get(conversationId);
+  if (!throttle) return false;
+  pendingAssistantWrites.delete(conversationId);
+  return throttle.cancel();
+}
+
+/**
+ * Persist any queued writes. Safety net for app shutdown.
+ *
+ * @param {string} [conversationId] one conversation, or all when omitted
+ */
+function flushPendingAssistantUpdates(conversationId) {
+  const ids = conversationId === undefined
+    ? [...pendingAssistantWrites.keys()]
+    : [conversationId];
+
+  for (const id of ids) {
+    const throttle = pendingAssistantWrites.get(id);
+    if (!throttle) continue;
+    pendingAssistantWrites.delete(id);
+    throttle.flush();
+  }
+}
+
 // Helper to get conversation data
 function getConversationData(conversationId) {
   try {
@@ -324,6 +414,10 @@ module.exports = {
   setupConversations,
   addMessage,
   updateLastAssistantMessage,
+  scheduleAssistantUpdate,
+  finalizeAssistantUpdate,
+  cancelPendingAssistantUpdate,
+  flushPendingAssistantUpdates,
   getConversationData,
   removeLastEmptyMessage,
   getConversationPath,

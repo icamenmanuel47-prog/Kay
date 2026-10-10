@@ -90,6 +90,12 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   unregisterHotkey();
+  // Persist any throttled streaming writes rather than losing them on exit.
+  try {
+    require('./conversations').flushPendingAssistantUpdates();
+  } catch (error) {
+    console.warn('[App] Failed to flush pending conversation writes:', error.message);
+  }
 });
 
 app.on('activate', () => {

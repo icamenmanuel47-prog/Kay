@@ -8,6 +8,10 @@ const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
 let abortController = null;
 
+// Monotonic id for the stream that currently owns the conversation. See
+// setupOpenRouter's chat:stream handler for why this exists.
+let activeStreamId = 0;
+
 function setupOpenRouter() {
   // Send a message (non-streaming)
   ipcMain.handle('chat:send', async (_, conversationId, message, images, model, systemPrompt) => {
@@ -72,7 +76,17 @@ function setupOpenRouter() {
     }
     abortController = new AbortController();
 
-    streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, abortController.signal);
+    // The aborted stream's catch handler still runs afterwards. Tagging each
+    // stream lets a superseded one recognise that it no longer owns the
+    // conversation and must not write to it (or emit events for it).
+    const streamId = ++activeStreamId;
+
+    // Discard anything queued for this conversation by the stream we just
+    // aborted, so a stale trailing write cannot land on the message we are
+    // about to append.
+    require('./conversations').cancelPendingAssistantUpdate(conversationId);
+
+    streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, abortController.signal, streamId);
   });
 
   // Cancel streaming
@@ -168,9 +182,21 @@ function buildRequestWithHistory(historyMessages, currentMessage, images, model,
   };
 }
 
-async function streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, signal) {
+async function streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, signal, streamId) {
   const win = require('./window').getWindow();
-  const { addMessage, updateLastAssistantMessage, getConversationData, removeLastEmptyMessage } = require('./conversations');
+  const {
+    addMessage,
+    getConversationData,
+    removeLastEmptyMessage,
+    scheduleAssistantUpdate,
+    finalizeAssistantUpdate,
+    flushPendingAssistantUpdates,
+  } = require('./conversations');
+
+  // False once a newer message has taken over this conversation. A superseded
+  // stream must not persist text or emit events for a conversation it no
+  // longer owns - its abort handler runs *after* the new stream has started.
+  const isCurrent = () => streamId === activeStreamId;
 
   // 1. Get existing history before adding current message
   const existingData = getConversationData(conversationId);
@@ -225,14 +251,15 @@ async function streamChatCompletion(conversationId, message, images, model, syst
           try {
             const parsed = JSON.parse(data);
             const delta = parsed.choices[0]?.delta?.content;
-            if (delta) {
+            if (delta && isCurrent()) {
               fullContent += delta;
               // Send chunk to renderer
               if (win) {
                 win.webContents.send('chat:stream-chunk', { conversationId, chunk: delta });
               }
-              // Update conversation file periodically
-              updateLastAssistantMessage(conversationId, fullContent);
+              // Throttled: this used to rewrite the entire conversation file
+              // once per token.
+              scheduleAssistantUpdate(conversationId, fullContent);
             }
           } catch (e) {
             // Ignore parse errors for incomplete chunks
@@ -242,18 +269,24 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     }
 
     // Send final content
-    if (win) {
-      win.webContents.send('chat:stream-end', { conversationId, content: fullContent });
+    if (isCurrent()) {
+      if (win) {
+        win.webContents.send('chat:stream-end', { conversationId, content: fullContent });
+      }
+      finalizeAssistantUpdate(conversationId, fullContent);
     }
-    updateLastAssistantMessage(conversationId, fullContent);
 
   } catch (error) {
+    // Superseded: a newer stream owns this conversation now. Touching the file
+    // here would overwrite the new message with stale text.
+    if (!isCurrent()) return;
+
     if (error.name === 'AbortError') {
       if (win) {
         win.webContents.send('chat:stream-end', { conversationId, content: fullContent, canceled: true });
       }
       if (fullContent) {
-        updateLastAssistantMessage(conversationId, fullContent);
+        finalizeAssistantUpdate(conversationId, fullContent);
       } else {
         removeLastEmptyMessage(conversationId);
       }
@@ -262,12 +295,20 @@ async function streamChatCompletion(conversationId, message, images, model, syst
       if (win) {
         win.webContents.send('chat:stream-error', error.message);
       }
-      // If nothing was streamed, remove the empty assistant placeholder
-      if (!fullContent) {
+      if (fullContent) {
+        // Keep whatever did arrive instead of dropping it on the floor, which
+        // is what happened before when a stream failed part-way through.
+        finalizeAssistantUpdate(conversationId, fullContent);
+      } else {
+        // Nothing streamed: remove the empty assistant placeholder.
         removeLastEmptyMessage(conversationId);
       }
     }
   } finally {
+    // Safety net for any path that returned without finalising.
+    if (isCurrent()) {
+      flushPendingAssistantUpdates(conversationId);
+    }
     abortController = null;
   }
 }
