@@ -1,6 +1,7 @@
 const Store = require('electron-store');
 const { safeStorage, app } = require('electron');
 const path = require('path');
+const { EventEmitter } = require('events');
 
 const DEFAULT_SETTINGS = {
   // App state
@@ -41,6 +42,12 @@ const store = new Store({
 
 // In-memory cache for decrypted API key
 let decryptedApiKey = null;
+
+// Main-process settings bus. Anything that renders settings-dependent UI
+// (the tray menu, chiefly) subscribes here. This replaces a 'settings:changed'
+// IPC channel that nothing ever sent, which is why the tray used to go stale.
+const events = new EventEmitter();
+events.setMaxListeners(50);
 
 /**
  * Encrypt a string using Electron's safeStorage (DPAPI on Windows)
@@ -90,6 +97,9 @@ function saveSettings() {
 
 /**
  * Get all settings (with decrypted API key)
+ *
+ * Main-process callers only. Never send this straight to the renderer - use
+ * getSettingsForRenderer() for anything crossing IPC.
  */
 function getSettings() {
   const settings = { ...store.store };
@@ -97,6 +107,28 @@ function getSettings() {
     settings.apiKey = decryptedApiKey;
   }
   return settings;
+}
+
+/**
+ * Settings as the renderer is allowed to see them: the API key is replaced
+ * with a placeholder rather than decrypted, plus a hasApiKey flag.
+ */
+function getSettingsForRenderer() {
+  const settings = { ...store.store };
+  settings.hasApiKey = !!settings.apiKey;
+  settings.apiKey = settings.apiKey ? '***' : null;
+  return settings;
+}
+
+/**
+ * Subscribe to main-process settings changes.
+ *
+ * @param {(change: {key: string}) => void} listener
+ * @returns {() => void} unsubscribe
+ */
+function onSettingsChanged(listener) {
+  events.on('settings-changed', listener);
+  return () => events.off('settings-changed', listener);
 }
 
 /**
@@ -120,6 +152,9 @@ function setSetting(key, value) {
   } else {
     store.set(key, value);
   }
+  // Deliberately publishes only the key name - subscribers must read the value
+  // they need, so an API key never travels across the bus.
+  events.emit('settings-changed', { key });
   return true;
 }
 
@@ -184,6 +219,8 @@ module.exports = {
   loadSettings,
   saveSettings,
   getSettings,
+  getSettingsForRenderer,
+  onSettingsChanged,
   getSetting,
   setSetting,
   getApiKey,

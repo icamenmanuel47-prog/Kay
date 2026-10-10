@@ -1,8 +1,8 @@
-const { app, Tray, Menu, nativeImage, BrowserWindow } = require('electron');
+const { app, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { showWindow, hideWindow, getWindow, toggleWindow } = require('./window');
-const { getSettings, setSetting } = require('./settings');
-const { registerHotkey, unregisterHotkey, updateHotkey } = require('./hotkey');
+const { getSettings, setSetting, onSettingsChanged } = require('./settings');
+const { registerHotkey, unregisterHotkey } = require('./hotkey');
 const { autoUpdater } = require('electron-updater');
 
 let tray = null;
@@ -90,42 +90,48 @@ function setupTray() {
     }
   });
 
-  // Update tray menu when settings change
-  const { ipcMain } = require('electron');
-  ipcMain.on('settings:changed', () => {
-    tray.setContextMenu(buildMenu());
-  });
-
-  ipcMain.on('hotkey:changed', () => {
-    tray.setContextMenu(buildMenu());
+  // Rebuild the menu whenever settings change. This used to listen on a
+  // 'settings:changed' IPC channel that nothing ever sent, so the labels went
+  // stale as soon as Kay was toggled from the app instead of the tray.
+  onSettingsChanged(() => {
+    if (tray) tray.setContextMenu(buildMenu());
   });
 
   return tray;
 }
 
+/**
+ * The single implementation of on/off.
+ *
+ * Reads the next state from settings rather than flipping a local flag, so the
+ * tray menu, the window and the persisted state can never disagree with each
+ * other. ipc.js delegates here instead of reimplementing it.
+ *
+ * @returns {boolean} the new on/off state
+ */
 function toggleOnOff() {
-  isOn = !isOn;
-  setSetting('isOn', isOn);
+  const settings = getSettings();
+  const newState = !settings.isOn;
 
-  if (isOn) {
+  // Persisting emits settings-changed, which rebuilds the tray menu.
+  setSetting('isOn', newState);
+  isOn = newState;
+
+  if (newState) {
     showWindow();
-    const settings = getSettings();
     registerHotkey(settings.hotkey);
   } else {
     hideWindow();
     unregisterHotkey();
   }
 
-  // Update tray menu
-  if (tray) {
-    tray.setContextMenu(buildMenu());
-  }
-
   // Notify renderer
   const win = getWindow();
   if (win) {
-    win.webContents.send('app:state-changed', { isOn });
+    win.webContents.send('app:state-changed', { isOn: newState });
   }
+
+  return newState;
 }
 
 function checkForUpdates(manual = false) {
@@ -143,17 +149,9 @@ function getTray() {
   return tray;
 }
 
-function setTrayState(on) {
-  isOn = on;
-  if (tray) {
-    tray.setContextMenu(buildMenu());
-  }
-}
-
 module.exports = {
   setupTray,
   getTray,
   toggleOnOff,
   checkForUpdates,
-  setTrayState,
 };

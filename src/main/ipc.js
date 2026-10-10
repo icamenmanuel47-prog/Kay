@@ -1,14 +1,22 @@
 const { ipcMain, dialog, shell, app } = require('electron');
 const fs = require('fs');
-const path = require('path');
-const { getSettings, setSetting, getApiKey, setApiKey, deleteApiKey, getHotkey, setHotkey, isEncryptionAvailable, resetSettings } = require('./settings');
+const { getSettings, getSettingsForRenderer, onSettingsChanged, setSetting, getApiKey, setApiKey, deleteApiKey, getHotkey, isEncryptionAvailable, resetSettings } = require('./settings');
 const { updateHotkey } = require('./hotkey');
-const { autoUpdater } = require('electron-updater');
-const { showWindow, hideWindow, toggleWindow, getWindow, setWindowOpacity, setAlwaysOnTop, isWindowOnTop } = require('./window');
-const { toggleOnOff, checkForUpdates, getTray } = require('./tray');
+const { hideWindow, getWindow, setWindowOpacity, setAlwaysOnTop, isWindowOnTop } = require('./window');
+const { toggleOnOff, checkForUpdates } = require('./tray');
 const { CONVERSATIONS_DIR } = require('./conversations');
 
 function setupIpc() {
+  // Forward main-process settings changes to the renderer (masked). The preload
+  // layer has always exposed onSettingsChanged(), but nothing ever sent the
+  // event, so listeners registered against it never fired.
+  onSettingsChanged(() => {
+    const win = getWindow();
+    if (win) {
+      win.webContents.send('settings:changed', getSettingsForRenderer());
+    }
+  });
+
   // App state
   ipcMain.handle('app:get-state', () => {
     const settings = getSettings();
@@ -19,26 +27,10 @@ function setupIpc() {
     };
   });
 
-  ipcMain.handle('app:toggle-on-off', async () => {
-    const settings = getSettings();
-    const newState = !settings.isOn;
-    setSetting('isOn', newState);
-
-    if (newState) {
-      showWindow();
-      registerHotkey(settings.hotkey);
-    } else {
-      hideWindow();
-      unregisterHotkey();
-    }
-
-    // Update tray
-    const tray = getTray();
-    if (tray) {
-      // Tray module will handle menu rebuild via settings:changed event
-    }
-
-    return { isOn: newState };
+  ipcMain.handle('app:toggle-on-off', () => {
+    // Delegate to tray.js: one implementation of on/off, so the tray menu,
+    // window and persisted state cannot drift apart (they used to).
+    return { isOn: toggleOnOff() };
   });
 
   ipcMain.handle('app:check-updates', async (_, manual = false) => {
@@ -84,13 +76,8 @@ function setupIpc() {
 
   // Settings
   ipcMain.handle('settings:get', () => {
-    const settings = getSettings();
-    // Don't send actual API key to renderer, just whether it's set
-    return {
-      ...settings,
-      apiKey: settings.apiKey ? '***' : null,
-      hasApiKey: !!settings.apiKey,
-    };
+    // Never crosses IPC with a decrypted API key - see settings.js.
+    return getSettingsForRenderer();
   });
 
   ipcMain.handle('settings:set', (_, key, value) => {
@@ -206,8 +193,5 @@ function setupIpc() {
     return result;
   });
 }
-
-// Import here to avoid circular dependency
-const { registerHotkey, unregisterHotkey } = require('./hotkey');
 
 module.exports = { setupIpc };
