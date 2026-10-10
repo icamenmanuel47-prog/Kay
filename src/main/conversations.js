@@ -212,7 +212,7 @@ function setupConversations() {
                 messageCount: content.messages?.length || 0,
                 createdAt: content.createdAt,
                 updatedAt: content.updatedAt || content.createdAt,
-                preview: getPreview(content.messages, searchTerm),
+                preview: getPreview(content.messages),
               };
             }
             return null;
@@ -231,16 +231,13 @@ function setupConversations() {
   });
 }
 
-function getPreview(messages, highlightTerm = null) {
+function getPreview(messages) {
   if (!messages || messages.length === 0) return 'No messages yet';
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
   const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
   const preview = lastUserMsg || lastAssistantMsg;
   if (!preview) return 'No messages yet';
-  let text = preview.content.substring(0, 100);
-  if (highlightTerm && text.toLowerCase().includes(highlightTerm)) {
-    // Could add highlighting here if needed
-  }
+  const text = preview.content.substring(0, 100);
   return text + (preview.content.length > 100 ? '...' : '');
 }
 

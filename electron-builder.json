@@ -2,6 +2,7 @@
   "appId": "com.kay.assistant",
   "productName": "Kay",
   "copyright": "Copyright © 2025",
+  "npmRebuild": false,
   "directories": {
     "output": "dist",
     "buildResources": "build"
@@ -39,10 +40,5 @@
     "installerIcon": "build/icon.ico",
     "uninstallerIcon": "build/icon.ico",
     "installerHeaderIcon": "build/icon.ico"
-  },
-  "publish": {
-    "provider": "github",
-    "owner": "YOUR_GITHUB_USERNAME",
-    "repo": "kay-assistant"
   }
 }

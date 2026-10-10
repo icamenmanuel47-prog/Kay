@@ -12,10 +12,14 @@ test('Preload: exposes complete kayAPI interface required by renderer', () => {
   }
 
   // Check settings methods
-  const settingsMethods = ['get', 'set', 'getApiKey', 'setApiKey', 'deleteApiKey', 'getHotkey', 'setHotkey', 'encryptionAvailable', 'isEncryptionAvailable'];
+  const settingsMethods = ['get', 'set', 'setApiKey', 'deleteApiKey', 'getHotkey', 'setHotkey', 'encryptionAvailable', 'isEncryptionAvailable'];
   for (const m of settingsMethods) {
     assert.ok(preloadCode.includes(`${m}:`), `kayAPI.settings missing method: ${m}`);
   }
+
+  // The renderer must never be able to read the key back out.
+  assert.ok(!preloadCode.includes('getApiKey:'), 'kayAPI.settings must not expose getApiKey');
+  assert.ok(!preloadCode.includes("'settings:get-api-key'"), 'preload must not call settings:get-api-key');
 
   // Check conversations methods
   const convMethods = ['list', 'get', 'create', 'update', 'delete', 'export', 'search'];
@@ -24,10 +28,14 @@ test('Preload: exposes complete kayAPI interface required by renderer', () => {
   }
 
   // Check chat methods
-  const chatMethods = ['sendMessage', 'streamMessage', 'cancelStream', 'getModels', 'setFavoriteModel'];
+  const chatMethods = ['streamMessage', 'cancelStream', 'getModels', 'setFavoriteModel'];
   for (const m of chatMethods) {
     assert.ok(preloadCode.includes(`${m}:`), `kayAPI.chat missing method: ${m}`);
   }
+
+  // Non-streaming send was dead code: the renderer only ever streams.
+  assert.ok(!preloadCode.includes('sendMessage:'), 'kayAPI.chat must not expose sendMessage');
+  assert.ok(!preloadCode.includes("'chat:send'"), 'preload must not call chat:send');
 
   // Check app methods
   const appMethods = ['toggleOnOff', 'getState', 'checkUpdates', 'quit', 'openExternal', 'openDataFolder', 'resetAllData', 'setLaunchAtStartup', 'getLaunchAtStartup'];

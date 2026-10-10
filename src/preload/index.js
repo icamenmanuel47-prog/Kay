@@ -19,7 +19,6 @@ contextBridge.exposeInMainWorld('kayAPI', {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
-    getApiKey: () => ipcRenderer.invoke('settings:get-api-key'),
     setApiKey: (key) => ipcRenderer.invoke('settings:set-api-key', key),
     deleteApiKey: () => ipcRenderer.invoke('settings:delete-api-key'),
     getHotkey: () => ipcRenderer.invoke('settings:get-hotkey'),
@@ -41,8 +40,6 @@ contextBridge.exposeInMainWorld('kayAPI', {
 
   // Chat / OpenRouter
   chat: {
-    sendMessage: (conversationId, message, images, model, systemPrompt) =>
-      ipcRenderer.invoke('chat:send', conversationId, message, images, model, systemPrompt),
     streamMessage: (conversationId, message, images, model, systemPrompt) =>
       ipcRenderer.send('chat:stream', conversationId, message, images, model, systemPrompt),
     cancelStream: () => ipcRenderer.invoke('chat:cancel-stream'),

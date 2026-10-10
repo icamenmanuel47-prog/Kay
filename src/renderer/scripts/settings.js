@@ -48,7 +48,6 @@ const elements = {
   settingsOpacityValue: null,
   alwaysOnTop: null,
   // Advanced
-  checkUpdatesOnStartup: null,
   checkUpdatesBtn: null,
   currentVersion: null,
   openDataFolderBtn: null,
@@ -118,7 +117,6 @@ function cacheElements() {
   elements.alwaysOnTop = $('#alwaysOnTop');
 
   // Advanced
-  elements.checkUpdatesOnStartup = $('#checkUpdatesOnStartup');
   elements.checkUpdatesBtn = $('#checkUpdatesBtn');
   elements.currentVersion = $('#currentVersion');
   elements.openDataFolderBtn = $('#openDataFolderBtn');
@@ -191,9 +189,20 @@ function bindEvents() {
   });
 
   // Advanced: Updates
-  elements.checkUpdatesBtn?.addEventListener('click', () => {
-    kayAPI.app.checkUpdates(true);
+  elements.checkUpdatesBtn?.addEventListener('click', async () => {
     showToast('Checking for updates...', 'info');
+    try {
+      const result = await kayAPI.app.checkUpdates(true);
+      if (!result?.success) {
+        showToast(result?.error || 'Update check failed', 'error');
+      } else if (result.updateAvailable) {
+        showToast(`Update available: ${result.version}`, 'success');
+      } else {
+        showToast('Kay is up to date', 'success');
+      }
+    } catch (error) {
+      showToast('Update check failed', 'error');
+    }
   });
 
   // Advanced: Data management
@@ -271,7 +280,6 @@ async function loadSettings() {
     elements.alwaysOnTop.checked = result.alwaysOnTop !== false;
 
     // Advanced
-    elements.checkUpdatesOnStartup.checked = result.checkUpdatesOnStartup !== false;
     elements.currentVersion.textContent = result.version || '1.0.0';
 
     // Encryption status

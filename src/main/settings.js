@@ -24,12 +24,10 @@ const DEFAULT_SETTINGS = {
 
   // Behavior
   launchAtStartup: false,
-  checkUpdatesOnStartup: true,
   showNotifications: true,
 
   // Advanced
   maxConversationHistory: 100,
-  streamResponses: true,
 };
 
 // Store configuration

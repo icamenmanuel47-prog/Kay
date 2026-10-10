@@ -71,11 +71,9 @@ app.whenReady().then(async () => {
     showWindow();
   }
 
-  // Check for updates on startup (silent)
-  const { autoUpdater } = require('electron-updater');
-  if (settings.checkUpdatesOnStartup) {
-    autoUpdater.checkForUpdates().catch(() => {});
-  }
+  // Startup update checks are deliberately not run: auto-update needs a
+  // published release source, which is not configured. The Settings button
+  // still checks on demand.
 });
 
 app.on('window-all-closed', () => {

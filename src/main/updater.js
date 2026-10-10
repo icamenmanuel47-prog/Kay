@@ -50,19 +50,30 @@ function notifyRenderer(event, data = {}) {
   }
 }
 
-// Check for updates (can be manual or automatic)
+// Check for updates.
+//
+// Returns a result rather than only firing events, so callers can tell the
+// user what happened - the renderer never subscribed to the updater event
+// channels, which is why a manual check used to end in silence.
+//
+// @param {boolean} manual true when triggered by the user
+// @returns {Promise<{success: boolean, error?: string, updateAvailable?: boolean, version?: string}>}
 async function checkForUpdates(manual = false) {
   try {
     const result = await autoUpdater.checkForUpdates();
-    return result;
+    const updateInfo = result?.updateInfo;
+    const available = !!(
+      updateInfo
+      && updateInfo.version
+      && updateInfo.version !== autoUpdater.currentVersion
+    );
+    return { success: true, updateAvailable: available, version: updateInfo?.version };
   } catch (error) {
     if (manual) {
-      const win = getWindow();
-      if (win) {
-        win.webContents.send('updater:error', { message: error.message });
-      }
+      notifyRenderer('error', { message: error.message });
     }
-    throw error;
+    console.warn('[Updater] checkForUpdates failed:', error.message);
+    return { success: false, error: error.message };
   }
 }
 

@@ -170,42 +170,9 @@ function isWindowOnTop() {
   return mainWindow ? mainWindow.isAlwaysOnTop() : true;
 }
 
-// IPC handlers for window controls
-function setupWindowIpc() {
-  ipcMain.handle('window:minimize', () => {
-    if (mainWindow) mainWindow.minimize();
-  });
-
-  ipcMain.handle('window:close', () => {
-    hideWindow();
-  });
-
-  ipcMain.handle('window:hide', () => {
-    hideWindow();
-  });
-
-  ipcMain.handle('window:toggle-always-on-top', () => {
-    const newState = !isWindowOnTop();
-    setAlwaysOnTop(newState);
-    return newState;
-  });
-
-  ipcMain.handle('window:set-opacity', (_, opacity) => {
-    setWindowOpacity(opacity);
-  });
-
-  ipcMain.handle('window:get-bounds', () => {
-    return mainWindow ? mainWindow.getBounds() : null;
-  });
-
-  ipcMain.handle('window:set-bounds', (_, bounds) => {
-    if (mainWindow) mainWindow.setBounds(bounds);
-  });
-
-  ipcMain.handle('window:is-always-on-top', () => {
-    return isWindowOnTop();
-  });
-}
+// NOTE: the window:* IPC handlers live in ipc.js. This file used to register a
+// second, identical set here; it was never called, and invoking it would have
+// thrown "Attempted to register a second handler".
 
 module.exports = {
   createWindow,
@@ -217,5 +184,4 @@ module.exports = {
   setAlwaysOnTop,
   isWindowOnTop,
   flushPendingBounds,
-  setupWindowIpc,
 };

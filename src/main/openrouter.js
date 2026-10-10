@@ -13,51 +13,6 @@ let abortController = null;
 let activeStreamId = 0;
 
 function setupOpenRouter() {
-  // Send a message (non-streaming)
-  ipcMain.handle('chat:send', async (_, conversationId, message, images, model, systemPrompt) => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      return { success: false, error: 'API key not set. Please configure in Settings.' };
-    }
-
-    const { addMessage, getConversationData } = require('./conversations');
-
-    try {
-      const existingData = getConversationData(conversationId);
-      const maxHistory = getSetting('maxConversationHistory') || 50;
-      const history = (existingData?.messages || []).slice(-maxHistory);
-
-      const requestBody = buildRequestWithHistory(history, message, images, model, systemPrompt, false);
-
-      const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://kay-assistant.app',
-          'X-Title': 'Kay Assistant',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        return { success: false, error: error.error?.message || `HTTP ${response.status}` };
-      }
-
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content || '';
-
-      // Persist user and assistant messages
-      addMessage(conversationId, { role: 'user', content: message, images });
-      addMessage(conversationId, { role: 'assistant', content });
-
-      return { success: true, content };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
   // Stream a message
   ipcMain.on('chat:stream', (_, conversationId, message, images, model, systemPrompt) => {
     const apiKey = getApiKey();
@@ -200,7 +155,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
 
   // 1. Get existing history before adding current message
   const existingData = getConversationData(conversationId);
-  const maxHistory = getSetting('maxConversationHistory') || 50;
+  const maxHistory = getSetting('maxConversationHistory') || 100;
   const history = (existingData?.messages || []).slice(-maxHistory);
 
   // 2. Add user message to conversation

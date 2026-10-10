@@ -1,9 +1,10 @@
 const { ipcMain, dialog, shell, app } = require('electron');
 const fs = require('fs');
-const { getSettings, getSettingsForRenderer, onSettingsChanged, setSetting, getApiKey, setApiKey, deleteApiKey, getHotkey, isEncryptionAvailable, resetSettings } = require('./settings');
+const { getSettings, getSettingsForRenderer, onSettingsChanged, setSetting, setApiKey, deleteApiKey, getHotkey, isEncryptionAvailable, resetSettings } = require('./settings');
 const { updateHotkey } = require('./hotkey');
 const { hideWindow, getWindow, setWindowOpacity, setAlwaysOnTop, isWindowOnTop } = require('./window');
-const { toggleOnOff, checkForUpdates } = require('./tray');
+const { toggleOnOff } = require('./tray');
+const { checkForUpdates } = require('./updater');
 const { CONVERSATIONS_DIR } = require('./conversations');
 
 function setupIpc() {
@@ -34,8 +35,8 @@ function setupIpc() {
   });
 
   ipcMain.handle('app:check-updates', async (_, manual = false) => {
-    checkForUpdates(manual);
-    return { success: true };
+    // Awaited so the UI gets a real answer instead of a permanent "checking".
+    return await checkForUpdates(manual);
   });
 
   ipcMain.handle('app:quit', () => {
@@ -83,11 +84,6 @@ function setupIpc() {
   ipcMain.handle('settings:set', (_, key, value) => {
     setSetting(key, value);
     return { success: true };
-  });
-
-  ipcMain.handle('settings:get-api-key', () => {
-    const key = getApiKey();
-    return { apiKey: key || '' };
   });
 
   ipcMain.handle('settings:set-api-key', (_, key) => {

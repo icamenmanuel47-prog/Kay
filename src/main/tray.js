@@ -3,7 +3,7 @@ const path = require('path');
 const { showWindow, hideWindow, getWindow, toggleWindow } = require('./window');
 const { getSettings, setSetting, onSettingsChanged } = require('./settings');
 const { registerHotkey, unregisterHotkey } = require('./hotkey');
-const { autoUpdater } = require('electron-updater');
+const { checkForUpdates } = require('./updater');
 
 let tray = null;
 let isOn = false;
@@ -134,17 +134,6 @@ function toggleOnOff() {
   return newState;
 }
 
-function checkForUpdates(manual = false) {
-  autoUpdater.checkForUpdates().catch((error) => {
-    if (manual) {
-      const win = getWindow();
-      if (win) {
-        win.webContents.send('updater:error', error.message);
-      }
-    }
-  });
-}
-
 function getTray() {
   return tray;
 }
@@ -153,5 +142,4 @@ module.exports = {
   setupTray,
   getTray,
   toggleOnOff,
-  checkForUpdates,
 };
