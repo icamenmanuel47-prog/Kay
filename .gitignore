@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.exe
+*.msi
+*.AppImage
+*.dmg
+*.deb
+*.rpm
+*.snap
+*.pkg
+*.tgz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+electron-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# App data (user conversations, settings)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# TypeScript cache
+*.tsbuildinfo

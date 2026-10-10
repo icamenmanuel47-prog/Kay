@@ -1,0 +1,527 @@
+/**
+ * Kay - Settings Module
+ * Handles settings modal: tabs, forms, API key, hotkey recorder, theme, opacity
+ */
+
+import { $, $$, createElement, clearElement, parseHotkey, showToast, copyToClipboard } from './utils.js';
+
+// kayAPI is exposed via contextBridge on window object by preload
+const kayAPI = window.kayAPI;
+
+// ============================================================================
+// State
+// ============================================================================
+
+let isHotkeyRecording = false;
+let currentSettings = null;
+let defaultSystemPrompt = `You are a tutor for a civil engineering student, with deep expertise in Structural Theory (statics, determinacy, internal forces, shear and moment diagrams, trusses, frames, deflections, influence lines, indeterminate structures) and related engineering subjects. For every problem: (1) list the given data and state all assumptions, including sign conventions and support conditions, (2) name the relevant principles and formulas, (3) solve step by step, showing every substitution with units, (4) check equilibrium, units, and the reasonableness of the result, (5) state the final answer clearly. If the problem is ambiguous, the diagram is unclear, or you are not sure, say so instead of guessing. Use LaTeX for all math.`;
+
+// ============================================================================
+// DOM Elements
+// ============================================================================
+
+const elements = {
+  modal: null,
+  modalContent: null,
+  closeBtn: null,
+  saveBtn: null,
+  tabs: {},
+  panels: {},
+  // General
+  hotkeyInput: null,
+  recordHotkeyBtn: null,
+  currentHotkeyDisplay: null,
+  launchAtStartup: null,
+  showNotifications: null,
+  // API
+  apiKeyInput: null,
+  toggleApiKeyVisibility: null,
+  saveApiKeyBtn: null,
+  deleteApiKeyBtn: null,
+  apiKeyStatus: null,
+  defaultModelSelect: null,
+  systemPromptInput: null,
+  resetSystemPromptBtn: null,
+  // Appearance
+  themeRadios: null,
+  settingsOpacitySlider: null,
+  settingsOpacityValue: null,
+  alwaysOnTop: null,
+  // Advanced
+  checkUpdatesOnStartup: null,
+  checkUpdatesBtn: null,
+  currentVersion: null,
+  openDataFolderBtn: null,
+  resetAllDataBtn: null,
+  encryptionStatus: null,
+};
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+export async function initSettings() {
+  cacheElements();
+  bindEvents();
+  await loadSettings();
+
+  // Return public API for window attachment
+  return {
+    openModal,
+    closeModal,
+    isOpen,
+  };
+}
+
+function cacheElements() {
+  elements.modal = $('#settingsModal');
+  elements.modalContent = $('#settingsModalContent');
+  elements.closeBtn = $('#closeSettingsBtn');
+  elements.saveBtn = $('#saveSettingsBtn');
+
+  // Tabs
+  elements.tabs = {
+    general: $('[data-tab="general"]'),
+    api: $('[data-tab="api"]'),
+    appearance: $('[data-tab="appearance"]'),
+    advanced: $('[data-tab="advanced"]'),
+  };
+
+  elements.panels = {
+    general: $('#tab-general'),
+    api: $('#tab-api'),
+    appearance: $('#tab-appearance'),
+    advanced: $('#tab-advanced'),
+  };
+
+  // General
+  elements.hotkeyInput = $('#hotkeyInput');
+  elements.recordHotkeyBtn = $('#recordHotkeyBtn');
+  elements.currentHotkeyDisplay = $('#currentHotkeyDisplay');
+  elements.launchAtStartup = $('#launchAtStartup');
+  elements.showNotifications = $('#showNotifications');
+
+  // API
+  elements.apiKeyInput = $('#apiKeyInput');
+  elements.toggleApiKeyVisibility = $('#toggleApiKeyVisibility');
+  elements.saveApiKeyBtn = $('#saveApiKeyBtn');
+  elements.deleteApiKeyBtn = $('#deleteApiKeyBtn');
+  elements.apiKeyStatus = $('#apiKeyStatus');
+  elements.defaultModelSelect = $('#defaultModelSelect');
+  elements.systemPromptInput = $('#systemPromptInput');
+  elements.resetSystemPromptBtn = $('#resetSystemPromptBtn');
+
+  // Appearance
+  elements.themeRadios = $$('input[name="theme"]');
+  elements.settingsOpacitySlider = $('#settingsOpacitySlider');
+  elements.settingsOpacityValue = $('#settingsOpacityValue');
+  elements.alwaysOnTop = $('#alwaysOnTop');
+
+  // Advanced
+  elements.checkUpdatesOnStartup = $('#checkUpdatesOnStartup');
+  elements.checkUpdatesBtn = $('#checkUpdatesBtn');
+  elements.currentVersion = $('#currentVersion');
+  elements.openDataFolderBtn = $('#openDataFolderBtn');
+  elements.resetAllDataBtn = $('#resetAllDataBtn');
+  elements.encryptionStatus = $('#encryptionStatus');
+}
+
+function bindEvents() {
+  // Modal open/close
+  elements.closeBtn?.addEventListener('click', closeModal);
+  elements.saveBtn?.addEventListener('click', saveAndClose);
+  elements.modal?.addEventListener('click', (e) => {
+    if (e.target === elements.modal) closeModal();
+  });
+
+  // Tab switching
+  Object.entries(elements.tabs).forEach(([key, tab]) => {
+    tab?.addEventListener('click', () => switchTab(key));
+  });
+
+  // General: Hotkey recording
+  elements.recordHotkeyBtn?.addEventListener('click', toggleHotkeyRecording);
+  elements.hotkeyInput?.addEventListener('keydown', handleHotkeyKeydown);
+  elements.hotkeyInput?.addEventListener('blur', () => {
+    if (isHotkeyRecording) stopHotkeyRecording();
+  });
+
+  // General: Launch at startup
+  elements.launchAtStartup?.addEventListener('change', (e) => {
+    kayAPI.app.setLaunchAtStartup(e.target.checked);
+  });
+
+  // API: API Key visibility toggle
+  elements.toggleApiKeyVisibility?.addEventListener('click', toggleApiKeyVisibility);
+
+  // API: Save/Delete API key
+  elements.saveApiKeyBtn?.addEventListener('click', saveApiKey);
+  elements.deleteApiKeyBtn?.addEventListener('click', deleteApiKey);
+
+  // API: Default model select
+  elements.defaultModelSelect?.addEventListener('change', (e) => {
+    kayAPI.settings.set('defaultModel', e.target.value);
+  });
+
+  // API: System prompt
+  elements.resetSystemPromptBtn?.addEventListener('click', resetSystemPrompt);
+
+  // Appearance: Theme
+  elements.themeRadios?.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        kayAPI.settings.set('theme', e.target.value);
+      }
+    });
+  });
+
+  // Appearance: Opacity
+  elements.settingsOpacitySlider?.addEventListener('input', (e) => {
+    const value = parseInt(e.target.value);
+    elements.settingsOpacityValue.textContent = `${value}%`;
+    kayAPI.window.setOpacity(value / 100);
+    kayAPI.settings.set('windowOpacity', value / 100);
+  });
+
+  // Appearance: Always on top
+  elements.alwaysOnTop?.addEventListener('change', (e) => {
+    kayAPI.window.toggleAlwaysOnTop().then(result => {
+      kayAPI.settings.set('alwaysOnTop', result.alwaysOnTop);
+    });
+  });
+
+  // Advanced: Updates
+  elements.checkUpdatesBtn?.addEventListener('click', () => {
+    kayAPI.app.checkUpdates(true);
+    showToast('Checking for updates...', 'info');
+  });
+
+  // Advanced: Data management
+  elements.openDataFolderBtn?.addEventListener('click', openDataFolder);
+  elements.resetAllDataBtn?.addEventListener('click', resetAllData);
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && elements.modal?.classList.contains('visible')) {
+      closeModal();
+    }
+  });
+}
+
+// ============================================================================
+// Modal Control
+// ============================================================================
+
+export function openModal() {
+  elements.modal?.classList.add('visible');
+  elements.modalContent?.focus();
+  loadSettings(); // Refresh on open
+}
+
+export function closeModal() {
+  elements.modal?.classList.remove('visible');
+  stopHotkeyRecording();
+}
+
+function saveAndClose() {
+  // Settings are saved in real-time, just close
+  closeModal();
+}
+
+function switchTab(tabName) {
+  // Update tabs
+  Object.entries(elements.tabs).forEach(([key, tab]) => {
+    tab?.classList.toggle('active', key === tabName);
+  });
+
+  // Update panels
+  Object.entries(elements.panels).forEach(([key, panel]) => {
+    panel?.classList.toggle('active', key === tabName);
+  });
+}
+
+// ============================================================================
+// Settings Loading
+// ============================================================================
+
+async function loadSettings() {
+  try {
+    const result = await kayAPI.settings.get();
+    if (!result) return;
+
+    currentSettings = result;
+
+    // Update hotkey display
+    updateHotkeyDisplay(result.hotkey);
+
+    // General
+    elements.launchAtStartup.checked = result.launchAtStartup || false;
+    elements.showNotifications.checked = result.showNotifications !== false;
+
+    // API
+    elements.apiKeyInput.value = result.hasApiKey ? '••••••••••••••••' : '';
+    updateApiKeyStatus(result.hasApiKey);
+    populateModelSelect(result.defaultModel);
+
+    // System prompt
+    elements.systemPromptInput.value = result.systemPrompt || defaultSystemPrompt;
+
+    // Appearance
+    setThemeRadio(result.theme || 'system');
+    elements.alwaysOnTop.checked = result.alwaysOnTop !== false;
+
+    // Advanced
+    elements.checkUpdatesOnStartup.checked = result.checkUpdatesOnStartup !== false;
+    elements.currentVersion.textContent = result.version || '1.0.0';
+
+    // Encryption status
+    const encryptionAvailable = await kayAPI.settings.encryptionAvailable();
+    updateEncryptionStatus(encryptionAvailable);
+
+  } catch (error) {
+    console.error('[Settings] Load failed:', error);
+    showToast('Failed to load settings', 'error');
+  }
+}
+
+function updateHotkeyDisplay(hotkey) {
+  elements.currentHotkeyDisplay.textContent = hotkey;
+  elements.hotkeyInput.value = hotkey;
+}
+
+function updateApiKeyStatus(hasKey) {
+  if (hasKey) {
+    elements.apiKeyStatus.textContent = 'API key is set';
+    elements.apiKeyStatus.className = 'setting-status success';
+  } else {
+    elements.apiKeyStatus.textContent = 'No API key set';
+    elements.apiKeyStatus.className = 'setting-status';
+  }
+}
+
+function populateModelSelect(selectedModel) {
+  if (!elements.defaultModelSelect) return;
+
+  // Get models from chat module (they should be cached)
+  // For now, just set the value - the chat module will populate via model list
+  elements.defaultModelSelect.value = selectedModel || '';
+}
+
+function setThemeRadio(theme) {
+  elements.themeRadios?.forEach(radio => {
+    radio.checked = radio.value === theme;
+  });
+}
+
+function updateEncryptionStatus(available) {
+  if (elements.encryptionStatus) {
+    if (available) {
+      elements.encryptionStatus.textContent = '✓ Encryption available (Windows DPAPI) - API key is securely encrypted';
+      elements.encryptionStatus.className = 'setting-status success';
+    } else {
+      elements.encryptionStatus.textContent = '⚠ Encryption not available - API key will be stored in plain text';
+      elements.encryptionStatus.className = 'setting-status warning';
+    }
+  }
+}
+
+// ============================================================================
+// Hotkey Recording
+// ============================================================================
+
+function toggleHotkeyRecording() {
+  if (isHotkeyRecording) {
+    stopHotkeyRecording();
+  } else {
+    startHotkeyRecording();
+  }
+}
+
+function startHotkeyRecording() {
+  isHotkeyRecording = true;
+  elements.hotkeyInput.value = 'Press keys...';
+  elements.hotkeyInput.classList.add('recording');
+  elements.recordHotkeyBtn.textContent = 'Cancel';
+  elements.hotkeyInput.focus();
+
+  // Listen for keydown globally
+  document.addEventListener('keydown', handleGlobalHotkey);
+}
+
+function stopHotkeyRecording() {
+  isHotkeyRecording = false;
+  elements.hotkeyInput.classList.remove('recording');
+  elements.recordHotkeyBtn.textContent = 'Record';
+
+  if (currentSettings?.hotkey) {
+    elements.hotkeyInput.value = currentSettings.hotkey;
+  }
+
+  document.removeEventListener('keydown', handleGlobalHotkey);
+}
+
+function handleGlobalHotkey(event) {
+  if (!isHotkeyRecording) return;
+
+  const hotkey = parseHotkey(event);
+  if (hotkey && hotkey !== 'Ctrl' && hotkey !== 'Alt' && hotkey !== 'Shift' && hotkey !== 'Meta') {
+    event.preventDefault();
+    elements.hotkeyInput.value = hotkey;
+    applyHotkey(hotkey);
+    stopHotkeyRecording();
+  }
+}
+
+function handleHotkeyKeydown(event) {
+  if (!isHotkeyRecording) return;
+
+  // Allow Escape to cancel
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    stopHotkeyRecording();
+    return;
+  }
+
+  // Prevent default for modifier keys during recording
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+    event.preventDefault();
+  }
+}
+
+async function applyHotkey(hotkey) {
+  try {
+    const result = await kayAPI.settings.setHotkey(hotkey);
+    if (result.success) {
+      currentSettings.hotkey = hotkey;
+      updateHotkeyDisplay(hotkey);
+      showToast('Hotkey updated', 'success');
+    } else {
+      showToast('Failed to set hotkey (may be in use)', 'error');
+      // Revert
+      elements.hotkeyInput.value = currentSettings.hotkey;
+    }
+  } catch (error) {
+    console.error('[Settings] Hotkey apply failed:', error);
+    showToast('Failed to set hotkey', 'error');
+  }
+}
+
+// ============================================================================
+// API Key Handling
+// ============================================================================
+
+let apiKeyVisible = false;
+
+function toggleApiKeyVisibility() {
+  apiKeyVisible = !apiKeyVisible;
+  elements.apiKeyInput.type = apiKeyVisible ? 'text' : 'password';
+
+  const eyeIcon = elements.toggleApiKeyVisibility.querySelector('.eye-icon');
+  const eyeOffIcon = elements.toggleApiKeyVisibility.querySelector('.eye-off-icon');
+
+  if (eyeIcon) eyeIcon.style.display = apiKeyVisible ? 'none' : 'block';
+  if (eyeOffIcon) eyeOffIcon.style.display = apiKeyVisible ? 'block' : 'none';
+}
+
+async function saveApiKey() {
+  const key = elements.apiKeyInput.value.trim();
+
+  if (key === '••••••••••••••••' || key === '') {
+    showToast('Enter a valid API key', 'warning');
+    return;
+  }
+
+  try {
+    const result = await kayAPI.settings.setApiKey(key);
+    if (result.success) {
+      showToast('API key saved', 'success');
+      elements.apiKeyInput.value = '••••••••••••••••';
+      updateApiKeyStatus(true);
+      apiKeyVisible = false;
+      elements.apiKeyInput.type = 'password';
+      // Reload models with new key
+      kayAPI.chat.getModels();
+    } else {
+      showToast('Failed to save API key', 'error');
+    }
+  } catch (error) {
+    console.error('[Settings] Save API key failed:', error);
+    showToast('Failed to save API key', 'error');
+  }
+}
+
+async function deleteApiKey() {
+  if (!confirm('Delete your API key?')) return;
+
+  try {
+    const result = await kayAPI.settings.deleteApiKey();
+    if (result.success) {
+      showToast('API key deleted', 'success');
+      elements.apiKeyInput.value = '';
+      updateApiKeyStatus(false);
+    }
+  } catch (error) {
+    console.error('[Settings] Delete API key failed:', error);
+    showToast('Failed to delete API key', 'error');
+  }
+}
+
+function resetSystemPrompt() {
+  if (!confirm('Reset system prompt to default?')) return;
+
+  elements.systemPromptInput.value = defaultSystemPrompt;
+  kayAPI.settings.set('systemPrompt', defaultSystemPrompt);
+  showToast('System prompt reset', 'success');
+}
+
+// ============================================================================
+// Advanced Actions
+// ============================================================================
+
+async function openDataFolder() {
+  try {
+    const result = await kayAPI.app.openDataFolder();
+    if (!result.success) {
+      showToast('Failed to open data folder', 'error');
+    }
+  } catch (error) {
+    console.error('[Settings] Open data folder failed:', error);
+    showToast('Failed to open data folder', 'error');
+  }
+}
+
+async function resetAllData() {
+  if (!confirm('This will delete ALL conversations, settings, and API key. This cannot be undone. Continue?')) return;
+
+  if (!confirm('Are you absolutely sure?')) return;
+
+  try {
+    const result = await kayAPI.app.resetAllData();
+    if (result.success) {
+      showToast('All data has been reset. Restart the app.', 'success');
+      // Close modal and quit app
+      closeModal();
+      setTimeout(() => kayAPI.app.quit(), 1000);
+    } else {
+      showToast(result.error || 'Failed to reset data', 'error');
+    }
+  } catch (error) {
+    console.error('[Settings] Reset failed:', error);
+    showToast('Failed to reset data', 'error');
+  }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+export function isOpen() {
+  return elements.modal?.classList.contains('visible') || false;
+}
+
+export default {
+  init: initSettings,
+  openModal,
+  closeModal,
+  isOpen,
+};

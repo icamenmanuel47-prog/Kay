@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kay - Personal Assistant</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/markdown.css">
+  <link rel="stylesheet" href="vendor/atom-one-dark.min.css">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- Header Bar (draggable) -->
+    <header class="header" id="header">
+      <div class="header-left">
+        <div class="app-title">
+          <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <span class="app-name">Kay</span>
+        </div>
+        <span class="hotkey-badge" id="hotkeyBadge" title="Global hotkey to toggle window">Ctrl+Shift+M</span>
+      </div>
+
+      <div class="header-center">
+        <div class="model-selector" id="modelSelector">
+          <button class="model-trigger" id="modelTrigger" aria-expanded="false" aria-haspopup="listbox">
+            <span class="model-name" id="modelName">Nemotron 3 Ultra</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <div class="model-dropdown" id="modelDropdown" role="listbox" aria-label="Select model">
+            <div class="model-search">
+              <input type="text" id="modelSearch" placeholder="Search models..." aria-label="Search models">
+              <label class="free-filter">
+                <input type="checkbox" id="freeOnlyFilter" checked>
+                <span>Free only</span>
+              </label>
+            </div>
+            <div class="model-list" id="modelList" role="listbox"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button class="icon-btn" id="opacityBtn" aria-label="Adjust opacity" title="Opacity">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          <span class="opacity-value" id="opacityValue">95%</span>
+        </button>
+        <div class="opacity-slider-container" id="opacitySliderContainer">
+          <input type="range" id="opacitySlider" min="30" max="100" value="95" aria-label="Window opacity">
+        </div>
+
+        <button class="icon-btn" id="themeBtn" aria-label="Toggle theme" title="Toggle theme">
+          <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+
+        <button class="icon-btn" id="minimizeBtn" aria-label="Minimize to tray" title="Minimize to tray">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h2>Conversations</h2>
+          <button class="icon-btn" id="newChatBtn" aria-label="New chat" title="New chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="sidebar-search">
+          <input type="text" id="conversationSearch" placeholder="Search conversations..." aria-label="Search conversations">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+
+        <ul class="conversation-list" id="conversationList" role="listbox"></ul>
+      </aside>
+
+      <!-- Chat Area -->
+      <main class="chat-area" id="chatArea">
+        <!-- Welcome Screen -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="welcome-content">
+            <svg class="welcome-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            <h1>Welcome to Kay</h1>
+            <p>Your personal assistant for civil engineering</p>
+            <div class="welcome-hints">
+              <div class="hint">
+                <kbd>Ctrl+Shift+M</kbd> <span>Toggle window</span>
+              </div>
+              <div class="hint">
+                <kbd>Ctrl+V</kbd> <span>Paste image</span>
+              </div>
+              <div class="hint">
+                <kbd>Enter</kbd> <span>Send message</span>
+              </div>
+              <div class="hint">
+                <kbd>Shift+Enter</kbd> <span>New line</span>
+              </div>
+            </div>
+            <button class="primary-btn" id="startChatBtn">Start New Chat</button>
+          </div>
+        </div>
+
+        <!-- Messages Container -->
+        <div class="messages-container" id="messagesContainer" role="log" aria-live="polite">
+          <div class="messages" id="messages"></div>
+          <div class="typing-indicator" id="typingIndicator" hidden>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+
+        <!-- Image Preview Bar -->
+        <div class="image-preview-bar" id="imagePreviewBar" hidden>
+          <div class="image-previews" id="imagePreviews"></div>
+          <button class="clear-images" id="clearImages" aria-label="Clear all images">Clear all</button>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area" id="inputArea">
+          <div class="input-toolbar">
+            <button class="icon-btn" id="attachImageBtn" aria-label="Attach image" title="Attach image (Ctrl+V to paste)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
+            <button class="icon-btn" id="clearChatBtn" aria-label="Clear chat" title="Clear current chat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+          <div class="input-wrapper">
+            <textarea
+              id="messageInput"
+              placeholder="Ask me about structural theory, mechanics, math, physics, or programming..."
+              rows="1"
+              aria-label="Message input"
+              spellcheck="true"
+            ></textarea>
+          </div>
+          <div class="input-footer">
+            <span class="input-hint" id="inputHint">Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line</span>
+            <button class="primary-btn send-btn" id="sendBtn" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal" hidden>
+      <div class="modal" id="settingsModalContent" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-header">
+          <h2 id="settingsTitle">Settings</h2>
+          <button class="icon-btn" id="closeSettingsBtn" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <nav class="settings-tabs" id="settingsTabs">
+            <button class="tab-btn active" data-tab="general">General</button>
+            <button class="tab-btn" data-tab="api">API & Models</button>
+            <button class="tab-btn" data-tab="appearance">Appearance</button>
+            <button class="tab-btn" data-tab="advanced">Advanced</button>
+          </nav>
+          <div class="tab-panels">
+            <!-- General Tab -->
+            <div class="tab-panel active" id="tab-general">
+              <div class="setting-group">
+                <h3>Hotkey</h3>
+                <div class="hotkey-input-wrapper">
+                  <input type="text" id="hotkeyInput" readonly placeholder="Press key combination...">
+                  <button class="secondary-btn" id="recordHotkeyBtn">Record</button>
+                </div>
+                <p class="setting-hint">Current: <span id="currentHotkeyDisplay">Ctrl+Shift+M</span></p>
+                <p class="setting-hint warning">Note: Shift+M will trigger while typing capital M in other apps. Consider Alt+M or Ctrl+Shift+M.</p>
+              </div>
+              <div class="setting-group">
+                <h3>Startup</h3>
+                <label class="toggle">
+                  <input type="checkbox" id="launchAtStartup">
+                  <span class="toggle-slider"></span>
+                  <span>Launch Kay at Windows startup</span>
+                </label>
+              </div>
+              <div class="setting-group">
+                <h3>Notifications</h3>
+                <label class="toggle">
+                  <input type="checkbox" id="showNotifications" checked>
+                  <span class="toggle-slider"></span>
+                  <span>Show desktop notifications</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- API & Models Tab -->
+            <div class="tab-panel" id="tab-api">
+              <div class="setting-group">
+                <h3>OpenRouter API Key</h3>
+                <div class="api-key-input">
+                  <input type="password" id="apiKeyInput" placeholder="sk-or-v1-..." autocomplete="off">
+                  <button class="icon-btn" id="toggleApiKeyVisibility" aria-label="Show/hide API key">
+                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  </button>
+                </div>
+                <p class="setting-hint">Your API key is encrypted and stored locally using Windows DPAPI. <a href="https://openrouter.ai/keys" target="_blank">Get your key at openrouter.ai</a></p>
+                <div class="btn-group">
+                  <button class="primary-btn" id="saveApiKeyBtn">Save Key</button>
+                  <button class="secondary-btn" id="deleteApiKeyBtn">Delete Key</button>
+                </div>
+                <p class="setting-status" id="apiKeyStatus"></p>
+              </div>
+              <div class="setting-group">
+                <h3>Default Model</h3>
+                <select id="defaultModelSelect" aria-label="Default model"></select>
+                <p class="setting-hint">Used for new conversations</p>
+              </div>
+              <div class="setting-group">
+                <h3>System Prompt</h3>
+                <textarea id="systemPromptInput" rows="8" placeholder="Enter system prompt..." aria-label="System prompt"></textarea>
+                <p class="setting-hint">This prompt is sent with every conversation to guide the AI's behavior.</p>
+                <button class="secondary-btn" id="resetSystemPromptBtn">Reset to Default</button>
+              </div>
+            </div>
+
+            <!-- Appearance Tab -->
+            <div class="tab-panel" id="tab-appearance">
+              <div class="setting-group">
+                <h3>Theme</h3>
+                <div class="radio-group" role="radiogroup" aria-label="Theme">
+                  <label class="radio">
+                    <input type="radio" name="theme" value="light">
+                    <span class="radio-slider"></span>
+                    <span>Light</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="theme" value="dark">
+                    <span class="radio-slider"></span>
+                    <span>Dark</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="theme" value="system" checked>
+                    <span class="radio-slider"></span>
+                    <span>System</span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-group">
+                <h3>Window Opacity</h3>
+                <div class="slider-with-value">
+                  <input type="range" id="settingsOpacitySlider" min="30" max="100" value="95">
+                  <span id="settingsOpacityValue">95%</span>
+                </div>
+              </div>
+              <div class="setting-group">
+                <h3>Always on Top</h3>
+                <label class="toggle">
+                  <input type="checkbox" id="alwaysOnTop" checked>
+                  <span class="toggle-slider"></span>
+                  <span>Keep window above other windows</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Advanced Tab -->
+            <div class="tab-panel" id="tab-advanced">
+              <div class="setting-group">
+                <h3>Updates</h3>
+                <label class="toggle">
+                  <input type="checkbox" id="checkUpdatesOnStartup" checked>
+                  <span class="toggle-slider"></span>
+                  <span>Check for updates on startup</span>
+                </label>
+                <div class="btn-group">
+                  <button class="primary-btn" id="checkUpdatesBtn">Check for Updates Now</button>
+                </div>
+                <p class="setting-hint">Current version: <span id="currentVersion">1.0.0</span></p>
+                <p class="setting-hint">Updates are downloaded from GitHub Releases. Configure repository in <code>electron-builder.json</code>.</p>
+              </div>
+              <div class="setting-group">
+                <h3>Data Management</h3>
+                <div class="btn-group">
+                  <button class="secondary-btn" id="openDataFolderBtn">Open Data Folder</button>
+                  <button class="secondary-btn danger" id="resetAllDataBtn">Reset All Data</button>
+                </div>
+                <p class="setting-hint warning">Reset will delete all conversations, settings, and API key. This cannot be undone.</p>
+              </div>
+              <div class="setting-group">
+                <h3>Encryption</h3>
+                <p class="setting-status" id="encryptionStatus">Checking...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="primary-btn" id="saveSettingsBtn">Save & Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Resize Handle (bottom-right corner for frameless window) -->
+    <div class="resize-handle" id="resizeHandle" aria-hidden="true"></div>
+  </div>
+
+  <!-- Load vendor libraries (local copies for offline support) -->
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="vendor/katex/katex.min.js"></script>
+  <script src="vendor/katex/auto-render.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js"></script>
+
+  <!-- Load app scripts as ES modules -->
+  <script type="module" src="scripts/app.js"></script>
+</body>
+</html>

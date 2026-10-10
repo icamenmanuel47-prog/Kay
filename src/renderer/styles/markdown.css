@@ -1,0 +1,738 @@
+/* ==========================================================================
+   Kay - Markdown Content Styles
+   Styles for rendered markdown content in messages
+   ========================================================================== */
+
+/* ==========================================================================
+   Base Prose Styles
+   ========================================================================== */
+
+.message-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: inherit;
+}
+
+.message-text * {
+  box-sizing: border-box;
+}
+
+/* Headings */
+.message-text h1,
+.message-text h2,
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+  margin: 1.5em 0 0.75em;
+  font-weight: 600;
+  line-height: 1.3;
+  color: inherit;
+}
+
+.message-text h1 { font-size: 1.5em; }
+.message-text h2 { font-size: 1.35em; }
+.message-text h3 { font-size: 1.2em; }
+.message-text h4 { font-size: 1.1em; }
+.message-text h5 { font-size: 1em; }
+.message-text h6 { font-size: 0.95em; }
+
+.message-text h1:first-child,
+.message-text h2:first-child,
+.message-text h3:first-child,
+.message-text h4:first-child,
+.message-text h5:first-child,
+.message-text h6:first-child {
+  margin-top: 0;
+}
+
+/* Paragraphs */
+.message-text p {
+  margin: 0 0 1em;
+}
+
+.message-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* Links */
+.message-text a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.message-text a:hover {
+  color: var(--accent-primary-hover);
+  border-bottom-color: var(--accent-primary-hover);
+}
+
+.message.user .message-text a {
+  color: var(--text-inverse);
+  border-bottom-color: rgba(255, 255, 255, 0.5);
+}
+
+.message.user .message-text a:hover {
+  border-bottom-color: var(--text-inverse);
+}
+
+/* Lists */
+.message-text ul,
+.message-text ol {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+}
+
+.message-text li {
+  margin: 0.25em 0;
+  line-height: 1.6;
+}
+
+.message-text li::marker {
+  color: var(--text-muted);
+}
+
+.message.user .message-text li::marker {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.message-text ul li {
+  list-style-type: disc;
+}
+
+.message-text ol li {
+  list-style-type: decimal;
+}
+
+.message-text ul ul,
+.message-text ol ol,
+.message-text ul ol,
+.message-text ol ul {
+  margin: 0.5em 0;
+}
+
+.message-text ul ul li {
+  list-style-type: circle;
+}
+
+.message-text ul ul ul li {
+  list-style-type: square;
+}
+
+/* Task Lists */
+.message-text input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+/* Blockquotes */
+.message-text blockquote {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid var(--accent-primary);
+  background: var(--bg-tertiary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.message.user .message-text blockquote {
+  background: rgba(255, 255, 255, 0.1);
+  border-left-color: var(--text-inverse);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.message-text blockquote p {
+  margin: 0.5em 0;
+}
+
+.message-text blockquote p:first-child {
+  margin-top: 0;
+}
+
+.message-text blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Horizontal Rule */
+.message-text hr {
+  margin: 1.5em 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+}
+
+.message.user .message-text hr {
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Inline Code */
+.message-text :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.15em 0.4em;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+}
+
+.message.user .message-text :not(pre) > code {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-inverse);
+}
+
+/* Code Blocks */
+.message-text pre {
+  margin: 1em 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  position: relative;
+}
+
+.message.user .message-text pre {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text pre code {
+  display: block;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+/* Syntax Highlighting (atom-one-dark theme compatible) */
+.message-text .hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 16px;
+  background: transparent !important;
+  color: #abb2bf;
+}
+
+.message-text .hljs-comment,
+.message-text .hljs-quote {
+  color: #5c6370;
+  font-style: italic;
+}
+
+.message-text .hljs-keyword,
+.message-text .hljs-selector-tag,
+.message-text .hljs-subst {
+  color: #c678dd;
+}
+
+.message-text .hljs-number,
+.message-text .hljs-literal,
+.message-text .hljs-variable,
+.message-text .hljs-template-variable,
+.message-text .hljs-tag .hljs-attr {
+  color: #d19a66;
+}
+
+.message-text .hljs-string,
+.message-text .hljs-doctag {
+  color: #98c379;
+}
+
+.message-text .hljs-title,
+.message-text .hljs-section,
+.message-text .hljs-selector-id {
+  color: #e06c75;
+  font-weight: 600;
+}
+
+.message-text .hljs-subst {
+  color: #abb2bf;
+}
+
+.message-text .hljs-type,
+.message-text .hljs-class .hljs-title {
+  color: #e5c07b;
+}
+
+.message-text .hljs-tag,
+.message-text .hljs-name,
+.message-text .hljs-attribute {
+  color: #e06c75;
+}
+
+.message-text .hljs-regexp,
+.message-text .hljs-link {
+  color: #56b6c2;
+}
+
+.message-text .hljs-symbol,
+.message-text .hljs-bullet {
+  color: #c678dd;
+}
+
+.message-text .hljs-built_in,
+.message-text .hljs-builtin-name {
+  color: #d19a66;
+}
+
+.message-text .hljs-meta {
+  color: #5c6370;
+}
+
+.message-text .hljs-deletion {
+  background: rgba(224, 108, 117, 0.1);
+}
+
+.message-text .hljs-addition {
+  background: rgba(152, 195, 121, 0.1);
+}
+
+.message-text .hljs-emphasis {
+  font-style: italic;
+}
+
+.message-text .hljs-strong {
+  font-weight: 600;
+}
+
+/* Tables */
+.message-text .table-wrapper {
+  margin: 1em 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  background: var(--bg-secondary);
+}
+
+.message.user .message-text .table-wrapper {
+  background: rgba(0, 0, 0, 0.15);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text .table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.message-text .table-container th,
+.message-text .table-container td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.message.user .message-text .table-container th,
+.message.user .message-text .table-container td {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text .table-container th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.message.user .message-text .table-container th {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-inverse);
+}
+
+.message-text .table-container tr:last-child td {
+  border-bottom: none;
+}
+
+.message-text .table-container tr:hover td {
+  background: var(--bg-hover);
+}
+
+.message.user .message-text .table-container tr:hover td {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Images */
+.message-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.message.user .message-text img {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Strong & Emphasis */
+.message-text strong {
+  font-weight: 600;
+}
+
+.message-text em {
+  font-style: italic;
+}
+
+.message-text del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* Definition Lists */
+.message-text dl {
+  margin: 1em 0;
+}
+
+.message-text dt {
+  font-weight: 600;
+  margin-top: 0.75em;
+}
+
+.message-text dd {
+  margin: 0.25em 0 0.75em 1.5em;
+  color: var(--text-secondary);
+}
+
+.message.user .message-text dd {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ==========================================================================
+   KaTeX Math Rendering
+   ========================================================================== */
+
+.message-text .katex {
+  font-size: 1em !important;
+}
+
+.message-text .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 1em 0;
+}
+
+.message-text .katex-display > .katex {
+  white-space: nowrap;
+}
+
+.message-text .katex-html {
+  color: inherit !important;
+}
+
+/* Fix for inline math baseline */
+.message-text .katex:not(.katex-display) {
+  vertical-align: baseline;
+}
+
+/* Error styling for invalid LaTeX */
+.message-text .katex-error {
+  color: var(--accent-danger) !important;
+  background: rgba(220, 53, 69, 0.1);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* ==========================================================================
+   Footnotes
+   ========================================================================== */
+
+.message-text .footnotes {
+  margin-top: 1.5em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.message.user .message-text .footnotes {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text .footnotes hr {
+  display: none;
+}
+
+.message-text .footnotes ol {
+  padding-left: 1.25em;
+}
+
+.message-text .footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  text-decoration: none;
+}
+
+.message-text .footnote-backref {
+  margin-left: 0.5em;
+  text-decoration: none;
+}
+
+/* ==========================================================================
+   Details/Summary (Collapsible)
+   ========================================================================== */
+
+.message-text details {
+  margin: 1em 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.message.user .message-text details {
+  background: rgba(0, 0, 0, 0.15);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text summary {
+  padding: 12px 16px;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-text summary::-webkit-details-marker {
+  display: none;
+}
+
+.message-text summary::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") center/contain no-repeat;
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.message-text details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.message-text details > *:not(summary) {
+  padding: 0 16px 16px;
+}
+
+.message-text details > *:not(summary):first-child {
+  margin-top: 0;
+}
+
+.message-text details > *:not(summary):last-child {
+  margin-bottom: 0;
+}
+
+/* ==========================================================================
+   Mark (Highlight)
+   ========================================================================== */
+
+.message-text mark {
+  background: var(--accent-warning);
+  color: var(--text-primary);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+}
+
+.message.user .message-text mark {
+  background: var(--accent-warning);
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Sub/Superscript
+   ========================================================================== */
+
+.message-text sub,
+.message-text sup {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+.message-text sub {
+  bottom: -0.25em;
+}
+
+.message-text sup {
+  top: -0.5em;
+}
+
+/* ==========================================================================
+   Keyboard Keys
+   ========================================================================== */
+
+.message-text kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 var(--border-color);
+}
+
+.message.user .message-text kbd {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-inverse);
+}
+
+/* ==========================================================================
+   Abbreviations
+   ========================================================================== */
+
+.message-text abbr {
+  text-decoration: underline dotted;
+  cursor: help;
+  text-decoration-color: var(--text-muted);
+}
+
+.message.user .message-text abbr {
+  text-decoration-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ==========================================================================
+   Print Styles (for export)
+   ========================================================================== */
+
+@media print {
+  .message-text {
+    font-size: 12pt;
+    line-height: 1.6;
+  }
+
+  .message-text pre {
+    page-break-inside: avoid;
+  }
+
+  .message-text blockquote {
+    page-break-inside: avoid;
+  }
+
+  .message-text .table-wrapper {
+    page-break-inside: avoid;
+  }
+
+  .message-text img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+}
+
+/* ==========================================================================
+   Dark Theme Adjustments for Syntax Highlighting
+   ========================================================================== */
+
+[data-theme="dark"] .message-text .hljs {
+  color: #abb2bf;
+}
+
+[data-theme="dark"] .message-text .hljs-comment,
+[data-theme="dark"] .message-text .hljs-quote {
+  color: #5c6370;
+}
+
+[data-theme="dark"] .message-text .hljs-keyword,
+[data-theme="dark"] .message-text .hljs-selector-tag,
+[data-theme="dark"] .message-text .hljs-subst {
+  color: #c678dd;
+}
+
+[data-theme="dark"] .message-text .hljs-number,
+[data-theme="dark"] .message-text .hljs-literal,
+[data-theme="dark"] .message-text .hljs-variable,
+[data-theme="dark"] .message-text .hljs-template-variable,
+[data-theme="dark"] .message-text .hljs-tag .hljs-attr {
+  color: #d19a66;
+}
+
+[data-theme="dark"] .message-text .hljs-string,
+[data-theme="dark"] .message-text .hljs-doctag {
+  color: #98c379;
+}
+
+[data-theme="dark"] .message-text .hljs-title,
+[data-theme="dark"] .message-text .hljs-section,
+[data-theme="dark"] .message-text .hljs-selector-id {
+  color: #e06c75;
+}
+
+[data-theme="dark"] .message-text .hljs-type,
+[data-theme="dark"] .message-text .hljs-class .hljs-title {
+  color: #e5c07b;
+}
+
+[data-theme="dark"] .message-text .hljs-tag,
+[data-theme="dark"] .message-text .hljs-name,
+[data-theme="dark"] .message-text .hljs-attribute {
+  color: #e06c75;
+}
+
+[data-theme="dark"] .message-text .hljs-regexp,
+[data-theme="dark"] .message-text .hljs-link {
+  color: #56b6c2;
+}
+
+[data-theme="dark"] .message-text .hljs-symbol,
+[data-theme="dark"] .message-text .hljs-bullet {
+  color: #c678dd;
+}
+
+[data-theme="dark"] .message-text .hljs-built_in,
+[data-theme="dark"] .message-text .hljs-builtin-name {
+  color: #d19a66;
+}
+
+[data-theme="dark"] .message-text .hljs-meta {
+  color: #5c6370;
+}
+
+/* ==========================================================================
+   High Contrast Mode Support
+   ========================================================================== */
+
+@media (prefers-contrast: high) {
+  .message-text :not(pre) > code {
+    border-width: 2px;
+  }
+
+  .message-text pre {
+    border-width: 2px;
+  }
+
+  .message-text blockquote {
+    border-left-width: 4px;
+  }
+
+  .message-text .katex-error {
+    border: 2px solid var(--accent-danger);
+  }
+}
+
+/* ==========================================================================
+   Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .message-text .katex-display > .katex {
+    animation: none;
+  }
+}

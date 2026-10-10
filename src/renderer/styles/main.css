@@ -1,0 +1,577 @@
+/* ==========================================================================
+   Kay 1.1 - Main Styles
+   Linear-inspired dark-first design system for civil engineering assistant
+   Design tokens adapted from Linear DESIGN.md (awesome-design-md-main)
+   Brand accent: Kay Blue (#4a90d9) - preserved for brand identity
+   ========================================================================== */
+
+/* ==========================================================================
+   Font Loading
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/inter/v19/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ==========================================================================
+   CSS Custom Properties - Design Tokens (Linear-inspired)
+   ========================================================================== */
+
+:root {
+  /* ===== Color System - Dark First (Linear-inspired) ===== */
+
+  /* Brand Accent - Kay Blue (trustworthy, technical) - PRESERVED */
+  --accent-primary: #4a90d9;
+  --accent-primary-hover: #5aa0e0;
+  --accent-primary-active: #3a7bc8;
+  --accent-primary-focus: rgba(74, 144, 217, 0.5);
+  --accent-primary-subtle: rgba(74, 144, 217, 0.12);
+
+  /* Semantic Colors */
+  --accent-success: #27a644;      /* Linear success green */
+  --accent-success-hover: #2eb84f;
+  --accent-success-subtle: rgba(39, 166, 68, 0.12);
+  --accent-warning: #d4a017;      /* Linear-style amber */
+  --accent-warning-hover: #e8b42a;
+  --accent-warning-subtle: rgba(212, 160, 23, 0.12);
+  --accent-danger: #c64545;       /* Linear-style red */
+  --accent-danger-hover: #d95a5a;
+  --accent-danger-subtle: rgba(198, 69, 69, 0.12);
+
+  /* Neutral - Dark Canvas System (Linear DESIGN.md values) */
+  --canvas: #010102;              /* Deepest background - Linear's near-black with blue tint */
+  --surface-1: #0f1011;           /* Primary card/panel surface */
+  --surface-2: #141516;           /* Elevated surface, hover states */
+  --surface-3: #18191a;           /* Higher elevation, dropdowns, modals */
+  --surface-4: #191a1b;           /* Highest elevation */
+
+  /* Borders - Hairline system (Linear DESIGN.md values) */
+  --hairline: #23252a;            /* Default border */
+  --hairline-strong: #34343a;     /* Stronger border, focus states */
+  --hairline-tertiary: #3e3e44;   /* Tertiary borders for nested surfaces */
+  --hairline-subtle: #1e2228;     /* Subtle divider */
+
+  /* Text Colors (Linear DESIGN.md values) */
+  --text-primary: #f7f8f8;        /* Primary text - near white */
+  --text-secondary: #d0d6e0;      /* Secondary text - Linear's ink-muted */
+  --text-muted: #8a8f98;          /* Muted text - Linear's ink-subtle */
+  --text-subtle: #62666d;         /* Subtle text - Linear's ink-tertiary */
+  --text-inverse: #010102;        /* Text on accent backgrounds */
+  --text-on-accent: #ffffff;      /* Text on primary accent */
+
+  /* Background aliases for compatibility */
+  --bg-primary: var(--canvas);
+  --bg-secondary: var(--surface-1);
+  --bg-tertiary: var(--surface-2);
+  --bg-hover: var(--surface-2);
+  --bg-active: var(--surface-3);
+  --bg-input: var(--surface-1);
+  --bg-modal: var(--surface-3);
+  --bg-toast: var(--surface-2);
+
+  --text-primary-alias: var(--text-primary);
+  --text-secondary-alias: var(--text-secondary);
+  --text-muted-alias: var(--text-muted);
+  --text-inverse-alias: var(--text-inverse);
+
+  --border-color: var(--hairline);
+  --border-light: var(--hairline-subtle);
+  --border-focus: var(--accent-primary);
+
+  --accent-secondary: var(--text-muted);
+  --accent-primary-hover-alias: var(--accent-primary-hover);
+
+  /* Shadows - Minimal, surface-based (Linear uses minimal shadows) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.5);
+
+  /* Border Radius - Hierarchical (Linear DESIGN.md values) */
+  --radius-xs: 4px;               /* Small chips, status badges */
+  --radius-sm: 6px;               /* Inline tags */
+  --radius-md: 8px;               /* All buttons, form inputs */
+  --radius-lg: 12px;              /* Cards, pricing, feature cards */
+  --radius-xl: 16px;              /* Product screenshot panels, hero */
+  --radius-xxl: 24px;             /* Oversized CTA banners (rare) */
+  --radius-pill: 9999px;          /* Pricing tab toggles, status pills */
+  --radius-full: 9999px;          /* Avatar circles */
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+
+  /* Font Sizes (Linear DESIGN.md hierarchy adapted) */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 22px;
+  --text-4xl: 28px;
+  --text-5xl: 36px;
+  --text-6xl: 48px;
+  --text-7xl: 64px;
+  --text-8xl: 80px;
+
+  /* Font Weights (Linear: display 600, body 400) */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Line Heights */
+  --leading-tight: 1.05;
+  --leading-snug: 1.15;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* Letter Spacing (Linear: aggressive negative tracking on display) */
+  --tracking-tight: -0.02em;
+  --tracking-tighter: -0.03em;
+  --tracking-tightest: -0.04em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.04em;
+  --tracking-widest: 0.08em;
+
+  /* Spacing - 4px base unit (Linear DESIGN.md) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Layout */
+  --header-height: 56px;          /* Linear's nav height */
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 48px;
+  --input-min-height: 44px;       /* Linear's compact button height */
+  --input-max-height: 180px;
+
+  /* Scrollbar */
+  --scrollbar-width: 8px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #3a3f4a;
+  --scrollbar-thumb-hover: #4a4f5a;
+
+  /* Z-Index Scale */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 1000;
+  --z-modal: 1010;
+  --z-popover: 1020;
+  --z-tooltip: 1030;
+  --z-toast: 2000;
+}
+
+/* ===== Light Theme Override ===== */
+[data-theme="light"] {
+  /* Light Canvas System */
+  --canvas: #fafafa;
+  --surface-1: #ffffff;
+  --surface-2: #f5f5f5;
+  --surface-3: #eeeeee;
+  --surface-4: #e8e8e8;
+
+  /* Borders */
+  --hairline: #e0e0e0;
+  --hairline-strong: #d0d0d0;
+  --hairline-subtle: #ebebeb;
+
+  /* Text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --text-muted: #7a7a7a;
+  --text-subtle: #9a9a9a;
+  --text-inverse: #ffffff;
+  --text-on-accent: #ffffff;
+
+  /* Background aliases */
+  --bg-primary: var(--canvas);
+  --bg-secondary: var(--surface-1);
+  --bg-tertiary: var(--surface-2);
+  --bg-hover: var(--surface-2);
+  --bg-active: var(--surface-3);
+  --bg-input: var(--surface-1);
+  --bg-modal: var(--surface-1);
+  --bg-toast: var(--surface-1);
+
+  /* Shadows - Lighter for light mode */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.12);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-thumb-hover: #a0a0a0;
+}
+
+/* ===== System Theme Detection ===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Dark is default, already defined above */
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --canvas: #fafafa;
+    --surface-1: #ffffff;
+    --surface-2: #f5f5f5;
+    --surface-3: #eeeeee;
+    --surface-4: #e8e8e8;
+
+    --hairline: #e0e0e0;
+    --hairline-strong: #d0d0d0;
+    --hairline-subtle: #ebebeb;
+
+    --text-primary: #1a1a1a;
+    --text-secondary: #4a4a4a;
+    --text-muted: #7a7a7a;
+    --text-subtle: #9a9a9a;
+    --text-inverse: #ffffff;
+    --text-on-accent: #ffffff;
+
+    --bg-primary: var(--canvas);
+    --bg-secondary: var(--surface-1);
+    --bg-tertiary: var(--surface-2);
+    --bg-hover: var(--surface-2);
+    --bg-active: var(--surface-3);
+    --bg-input: var(--surface-1);
+    --bg-modal: var(--surface-1);
+    --bg-toast: var(--surface-1);
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.12);
+
+    --scrollbar-thumb: #c0c0c0;
+    --scrollbar-thumb-hover: #a0a0a0;
+  }
+}
+
+/* ==========================================================================
+   Reset & Base
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  /* overflow: hidden removed - allows frameless window resize handles to work */
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--bg-primary);
+}
+
+/* ==========================================================================
+   Scrollbar
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Thin scrollbars for specific containers */
+.sidebar ::-webkit-scrollbar,
+.messages-container ::-webkit-scrollbar,
+.model-list ::-webkit-scrollbar,
+.tab-panels ::-webkit-scrollbar,
+.conversation-list ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.sidebar ::-webkit-scrollbar-thumb,
+.messages-container ::-webkit-scrollbar-thumb,
+.model-list ::-webkit-scrollbar-thumb,
+.tab-panels ::-webkit-scrollbar-thumb,
+.conversation-list ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+  border: none;
+}
+
+/* ==========================================================================
+   Selection
+   ========================================================================== */
+
+::selection {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.message-content ::selection {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.message.user .message-content ::selection {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ==========================================================================
+   Focus Visible
+   ========================================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+.hidden {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.flex { display: flex; }
+.flex-1 { flex: 1; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in { animation: fade-in var(--transition-normal); }
+.animate-slide-in-right { animation: slide-in-right var(--transition-normal); }
+.animate-slide-in-left { animation: slide-in-left var(--transition-normal); }
+.animate-slide-up { animation: slide-up var(--transition-normal); }
+.animate-slide-down { animation: slide-down var(--transition-normal); }
+.animate-scale-in { animation: scale-in var(--transition-normal); }
+
+/* ==========================================================================
+   KBD
+   ========================================================================== */
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 var(--hairline);
+}
+
+/* ==========================================================================
+   Code inline
+   ========================================================================== */
+
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  color: var(--accent-primary);
+  background: var(--surface-2);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+}
+
+/* ==========================================================================
+   Links
+   ========================================================================== */
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--accent-primary-hover);
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   Disabled States
+   ========================================================================== */
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   High Contrast Mode
+   ========================================================================== */
+
+@media (prefers-contrast: more) {
+  :root {
+    --hairline: currentColor;
+    --hairline-strong: currentColor;
+    --border-focus: currentColor;
+    --accent-primary-focus: currentColor;
+  }
+}
