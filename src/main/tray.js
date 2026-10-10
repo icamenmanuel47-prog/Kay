@@ -1,6 +1,7 @@
 const { app, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { showWindow, hideWindow, getWindow, toggleWindow } = require('./window');
+const { getAppIcon } = require('./app-icon');
 const { getSettings, setSetting, onSettingsChanged } = require('./settings');
 const { registerHotkey, unregisterHotkey } = require('./hotkey');
 const { checkForUpdates } = require('./updater');
@@ -9,12 +10,11 @@ let tray = null;
 let isOn = false;
 
 function createTrayIcon() {
-  // Try to load custom icon, fallback to default
-  let iconPath = path.join(__dirname, '..', '..', 'build', 'icon.ico');
-  let icon = nativeImage.createFromPath(iconPath);
+  // Shared loader; see app-icon.js for why this cannot be createFromPath.
+  let icon = getAppIcon();
 
   // If icon doesn't exist, create a simple fallback using base64 PNG
-  if (icon.isEmpty()) {
+  if (icon === null) {
     // 16x16 blue circle PNG (base64)
     const fallbackBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAADhSURBVDhPY/z//z8DJQAggJiQOe/fv2fv3r1Pnjz58ePHw4cPH378+PH79+/fv3///v379+/fv3/////AQYAJ8tAfsJtTQgAAAABJRU5ErkJggg==';
     icon = nativeImage.createFromDataURL(`data:image/png;base64,${fallbackBase64}`);

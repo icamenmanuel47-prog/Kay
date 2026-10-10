@@ -3,7 +3,7 @@
  * Handles conversation list: loading, search, create, select, delete, rename
  */
 
-import { $, $$, createElement, clearElement, formatDate, debounce, showToast } from './utils.js';
+import { $, $$, createElement, clearElement, formatDate, debounce, showToast, toggleClass } from './utils.js';
 
 // kayAPI is exposed via contextBridge on window object by preload
 const kayAPI = window.kayAPI;

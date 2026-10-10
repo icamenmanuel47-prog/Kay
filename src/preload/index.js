@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('kayAPI', {
     close: () => ipcRenderer.invoke('window:close'),
     hide: () => ipcRenderer.invoke('window:hide'),
     toggleAlwaysOnTop: () => ipcRenderer.invoke('window:toggle-always-on-top'),
+    setAlwaysOnTop: (flag) => ipcRenderer.invoke('window:set-always-on-top', flag),
     setOpacity: (opacity) => ipcRenderer.invoke('window:set-opacity', opacity),
     getBounds: () => ipcRenderer.invoke('window:get-bounds'),
     setBounds: (bounds) => ipcRenderer.invoke('window:set-bounds', bounds),

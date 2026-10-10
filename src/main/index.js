@@ -9,6 +9,7 @@ const { setupConversations } = require('./conversations');
 const { setupOpenRouter } = require('./openrouter');
 const { setupIpc } = require('./ipc');
 const { setIsQuitting, getIsQuitting } = require('./state');
+const { classifyNavigation } = require('./navigation');
 
 let settings = null;
 
@@ -29,17 +30,20 @@ app.on('second-instance', () => {
 });
 
 // Security: Prevent navigation to external URLs
+// (Logic lives in navigation.js so it can be unit tested - and because the
+// old `origin !== 'file://'` comparison never matched anything.)
+const rendererDir = path.join(__dirname, '..', 'renderer');
+
 app.on('web-contents-created', (event, contents) => {
   contents.on('will-navigate', (event, navigationUrl) => {
-    const parsedUrl = new URL(navigationUrl);
-    if (parsedUrl.origin !== 'file://') {
-      event.preventDefault();
-      shell.openExternal(navigationUrl);
-    }
+    const { preventNavigation, openExternal } = classifyNavigation(navigationUrl, { allowedDir: rendererDir });
+    if (preventNavigation) event.preventDefault();
+    if (openExternal) shell.openExternal(openExternal);
   });
 
   contents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    const { openExternal } = classifyNavigation(url, { allowedDir: rendererDir });
+    if (openExternal) shell.openExternal(openExternal);
     return { action: 'deny' };
   });
 });

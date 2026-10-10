@@ -6,6 +6,7 @@ const { hideWindow, getWindow, setWindowOpacity, setAlwaysOnTop, isWindowOnTop }
 const { toggleOnOff } = require('./tray');
 const { checkForUpdates } = require('./updater');
 const { CONVERSATIONS_DIR } = require('./conversations');
+const { classifyNavigation } = require('./navigation');
 
 function setupIpc() {
   // Forward main-process settings changes to the renderer (masked). The preload
@@ -44,7 +45,13 @@ function setupIpc() {
   });
 
   ipcMain.handle('app:open-external', (_, url) => {
-    shell.openExternal(url);
+    // Renderer-supplied URL: only http(s) is ever handed to the OS shell.
+    const { openExternal } = classifyNavigation(url);
+    if (!openExternal) {
+      return { success: false, error: 'Blocked URL' };
+    }
+    shell.openExternal(openExternal);
+    return { success: true };
   });
 
   // Open data folder
@@ -134,6 +141,15 @@ function setupIpc() {
     const newState = !isWindowOnTop();
     setAlwaysOnTop(newState);
     return { alwaysOnTop: newState };
+  });
+
+  // Set-to-a-value, as opposed to toggling. applySettings() in the renderer
+  // calls this on startup; it previously called a method the preload never
+  // exposed, so "always on top" was silently never applied from settings.
+  ipcMain.handle('window:set-always-on-top', (_, flag) => {
+    const enabled = flag === true;
+    setAlwaysOnTop(enabled);
+    return { alwaysOnTop: enabled };
   });
 
   ipcMain.handle('window:set-opacity', (_, opacity) => {

@@ -2,6 +2,7 @@ const { BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
 const { getSetting, setSetting } = require('./settings');
 const { getIsQuitting } = require('./state');
+const { getAppIcon } = require('./app-icon');
 
 let mainWindow = null;
 let isWindowVisible = false;
@@ -17,6 +18,7 @@ function createWindow() {
   const settings = require('./settings').getSettings();
   const bounds = settings.windowBounds || { width: 500, height: 700 };
   const opacity = settings.windowOpacity || 0.95;
+  const appIcon = getAppIcon();
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
@@ -55,7 +57,10 @@ function createWindow() {
       allowRunningInsecureContent: false,
       experimentalFeatures: false,
     },
-    icon: path.join(__dirname, '..', '..', 'build', 'icon.ico'),
+    // Spread rather than assigning `icon: getAppIcon()` outright: if the key
+    // is present but not an image, Electron warns "Argument must be a file
+    // path or a NativeImage". Omitted, it falls back to the exe's own icon.
+    ...(appIcon ? { icon: appIcon } : {}),
   });
 
   // Load the renderer

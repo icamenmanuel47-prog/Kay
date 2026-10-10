@@ -1,12 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Resolved from this file so the suite runs on any machine, including CI.
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PRELOAD_PATH = path.join(ROOT, 'src', 'preload', 'index.js');
+const MAIN_DIR = path.join(ROOT, 'src', 'main');
+const RENDERER_SCRIPTS_DIR = path.join(ROOT, 'src', 'renderer', 'scripts');
+
+const jsFilesIn = (dir) =>
+  fs.readdirSync(dir).filter((name) => name.endsWith('.js'));
 
 test('Preload: exposes complete kayAPI interface required by renderer', () => {
-  const preloadCode = fs.readFileSync('D:/AI-Projects/Kay/src/preload/index.js', 'utf-8');
+  const preloadCode = fs.readFileSync(PRELOAD_PATH, 'utf-8');
 
   // Check window methods
-  const windowMethods = ['minimize', 'close', 'hide', 'toggleAlwaysOnTop', 'setOpacity', 'getBounds', 'setBounds', 'isAlwaysOnTop'];
+  const windowMethods = ['minimize', 'close', 'hide', 'toggleAlwaysOnTop', 'setAlwaysOnTop', 'setOpacity', 'getBounds', 'setBounds', 'isAlwaysOnTop'];
   for (const m of windowMethods) {
     assert.ok(preloadCode.includes(`${m}:`), `kayAPI.window missing method: ${m}`);
   }
@@ -53,5 +64,48 @@ test('Preload: exposes complete kayAPI interface required by renderer', () => {
   for (const m of listenerMethods) {
     assert.ok(preloadCode.includes(`${m}:`), `kayAPI missing event listener: ${m}`);
   }
+});
+
+test('Preload: every invoked channel has a main-process handler', () => {
+  const preloadCode = fs.readFileSync(PRELOAD_PATH, 'utf8');
+
+  const invoked = new Set(
+    [...preloadCode.matchAll(/ipcRenderer\.invoke\(\s*'([^']+)'/g)].map((m) => m[1]),
+  );
+  assert.ok(invoked.size > 20, 'should have found the preload IPC surface');
+
+  const handled = new Set();
+  for (const file of jsFilesIn(MAIN_DIR)) {
+    const source = fs.readFileSync(path.join(MAIN_DIR, file), 'utf8');
+    for (const match of source.matchAll(/ipcMain\.(?:handle|on)\(\s*'([^']+)'/g)) {
+      handled.add(match[1]);
+    }
+  }
+
+  const unhandled = [...invoked].filter((channel) => !handled.has(channel)).sort();
+  assert.deepEqual(unhandled, [], 'preload invokes channels nothing in main handles');
+});
+
+test('Preload: every kayAPI method the renderer calls is really exposed', () => {
+  const preloadCode = fs.readFileSync(PRELOAD_PATH, 'utf8');
+
+  // Guards against the renderer calling a method the preload never defined,
+  // which throws "kayAPI.<group>.<method> is not a function" at runtime.
+  // Name-based rather than structural, so it cannot prove the method sits in
+  // the right group - but it reliably catches a method that is absent.
+  const used = new Set();
+  for (const file of jsFilesIn(RENDERER_SCRIPTS_DIR)) {
+    const source = fs.readFileSync(path.join(RENDERER_SCRIPTS_DIR, file), 'utf8');
+    for (const match of source.matchAll(/\bkayAPI\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(/g)) {
+      used.add(`${match[1]}.${match[2]}`);
+    }
+  }
+  assert.ok(used.size > 10, 'should have found renderer kayAPI call sites');
+
+  const missing = [...used]
+    .filter((ref) => !preloadCode.includes(`${ref.split('.')[1]}:`))
+    .sort();
+
+  assert.deepEqual(missing, [], 'renderer calls kayAPI methods the preload does not expose');
 });
 
