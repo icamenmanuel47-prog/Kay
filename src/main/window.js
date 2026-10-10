@@ -1,10 +1,17 @@
 const { BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
 const { getSetting, setSetting } = require('./settings');
-const { getIsQuitting } = require('./index');
+const { getIsQuitting } = require('./state');
 
 let mainWindow = null;
 let isWindowVisible = false;
+
+// move/resize fire on every pixel of a drag. Persisting each one would write
+// the settings file, notify the tray and send IPC continuously for a value
+// that only matters once the drag finishes.
+const SAVE_BOUNDS_DELAY_MS = 300;
+let boundsTimer = null;
+let pendingBounds = null;
 
 function createWindow() {
   const settings = require('./settings').getSettings();
@@ -82,10 +89,33 @@ function createWindow() {
   return mainWindow;
 }
 
+/**
+ * Record the window position, debounced by SAVE_BOUNDS_DELAY_MS.
+ */
 function saveBounds() {
   if (!mainWindow) return;
-  const bounds = mainWindow.getBounds();
+  pendingBounds = mainWindow.getBounds();
+  if (boundsTimer !== null) return;
+  boundsTimer = setTimeout(flushPendingBounds, SAVE_BOUNDS_DELAY_MS);
+}
+
+/**
+ * Write any debounced window position immediately.
+ * Called when the window hides and on quit so the last position is never lost.
+ *
+ * @returns {boolean} whether a write happened
+ */
+function flushPendingBounds() {
+  if (boundsTimer !== null) {
+    clearTimeout(boundsTimer);
+    boundsTimer = null;
+  }
+  if (!pendingBounds) return false;
+
+  const bounds = pendingBounds;
+  pendingBounds = null;
   require('./settings').setSetting('windowBounds', bounds);
+  return true;
 }
 
 function getWindow() {
@@ -103,6 +133,8 @@ function showWindow() {
 
 function hideWindow() {
   if (mainWindow && mainWindow.isVisible()) {
+    // Persist the final position now rather than leaving it to the debounce.
+    flushPendingBounds();
     mainWindow.hide();
     isWindowVisible = false;
     mainWindow.webContents.send('window:hidden');
@@ -184,5 +216,6 @@ module.exports = {
   setWindowOpacity,
   setAlwaysOnTop,
   isWindowOnTop,
+  flushPendingBounds,
   setupWindowIpc,
 };

@@ -8,8 +8,8 @@ const { setupUpdater } = require('./updater');
 const { setupConversations } = require('./conversations');
 const { setupOpenRouter } = require('./openrouter');
 const { setupIpc } = require('./ipc');
+const { setIsQuitting, getIsQuitting } = require('./state');
 
-let isQuitting = false;
 let settings = null;
 
 // Prevent multiple instances
@@ -79,7 +79,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (!isQuitting) {
+  if (!getIsQuitting()) {
     // On macOS, keep app running in tray
     if (process.platform !== 'darwin') {
       app.quit();
@@ -88,13 +88,14 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  isQuitting = true;
+  setIsQuitting(true);
   unregisterHotkey();
-  // Persist any throttled streaming writes rather than losing them on exit.
+  // Persist any throttled writes rather than losing them on exit.
   try {
     require('./conversations').flushPendingAssistantUpdates();
+    require('./window').flushPendingBounds();
   } catch (error) {
-    console.warn('[App] Failed to flush pending conversation writes:', error.message);
+    console.warn('[App] Failed to flush pending writes on quit:', error.message);
   }
 });
 
@@ -105,11 +106,6 @@ app.on('activate', () => {
   }
 });
 
-// Getter for isQuitting state
-function getIsQuitting() {
-  return isQuitting;
-}
-
 // Handle protocol links (for deep linking if needed)
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -118,5 +114,3 @@ if (process.defaultApp) {
 } else {
   app.setAsDefaultProtocolClient('kay');
 }
-
-module.exports = { getIsQuitting };

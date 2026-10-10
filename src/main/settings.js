@@ -49,6 +49,15 @@ let decryptedApiKey = null;
 const events = new EventEmitter();
 events.setMaxListeners(50);
 
+// Settings writes can arrive in bursts - dragging the window fires on every
+// move event, the opacity slider on every input. Listeners rebuild a tray menu
+// and send IPC, so announce the first change immediately and coalesce the rest
+// of the burst into one trailing notification.
+const NOTIFY_WINDOW_MS = 100;
+let notifyTimer = null;
+let notifyDirty = false;
+let lastChangedKey = null;
+
 /**
  * Encrypt a string using Electron's safeStorage (DPAPI on Windows)
  */
@@ -154,8 +163,35 @@ function setSetting(key, value) {
   }
   // Deliberately publishes only the key name - subscribers must read the value
   // they need, so an API key never travels across the bus.
-  events.emit('settings-changed', { key });
+  notifySettingsChanged(key);
   return true;
+}
+
+/**
+ * Announce a settings change, coalescing bursts.
+ *
+ * The first change in a burst is announced immediately; anything that follows
+ * within NOTIFY_WINDOW_MS collapses into a single trailing notification.
+ * Listeners always re-read current state, so collapsing is safe.
+ *
+ * @param {string} key
+ */
+function notifySettingsChanged(key) {
+  lastChangedKey = key;
+
+  if (notifyTimer !== null) {
+    notifyDirty = true;
+    return;
+  }
+
+  events.emit('settings-changed', { key });
+
+  notifyTimer = setTimeout(() => {
+    notifyTimer = null;
+    if (!notifyDirty) return;
+    notifyDirty = false;
+    events.emit('settings-changed', { key: lastChangedKey });
+  }, NOTIFY_WINDOW_MS);
 }
 
 /**
