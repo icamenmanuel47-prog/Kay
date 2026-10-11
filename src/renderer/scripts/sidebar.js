@@ -358,10 +358,61 @@ function removeContextMenu() {
 
 function handleRename(conv) {
   removeContextMenu();
-  const newTitle = prompt('Enter new title:', conv.title);
-  if (newTitle && newTitle.trim() && newTitle !== conv.title) {
-    renameConversation(conv.id, newTitle.trim());
-  }
+  startInlineRename(conv.id);
+}
+
+/**
+ * Rename in place, inside the list row.
+ *
+ * The old implementation used window.prompt(), which Electron does not
+ * implement at all - it returns undefined and logs "prompt() is not
+ * supported", so Rename from the context menu and F2 silently did nothing.
+ */
+function startInlineRename(id) {
+  const item = elements.list?.querySelector(`.conversation-item[data-id="${id}"]`);
+  const conv = conversations.find(c => c.id === id);
+  if (!item || !conv || item.dataset.renaming === 'true') return;
+
+  const titleEl = item.querySelector('.conv-title');
+  if (!titleEl) return;
+  item.dataset.renaming = 'true';
+
+  const input = createElement('input', {
+    class: 'conv-rename-input',
+    type: 'text',
+    value: conv.title,
+    'aria-label': 'Conversation title',
+  });
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finish = (commit) => {
+    if (finished) return;
+    finished = true;
+
+    const newTitle = input.value.trim();
+    if (commit && newTitle && newTitle !== conv.title) {
+      renameConversation(id, newTitle).finally(() => renderConversations());
+    } else {
+      renderConversations(); // restore the original markup
+    }
+  };
+
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // keep the sidebar shortcuts out of the editor
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
+  // Clicking the editor must not also select the conversation
+  input.addEventListener('click', (e) => e.stopPropagation());
 }
 
 function handleExport(conv) {

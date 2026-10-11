@@ -114,7 +114,14 @@ function bindEvents() {
     sendBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      sendMessage();
+      // While streaming the button is the stop control - it used to be
+      // disabled instead, which made the pause icon it drew a lie and left
+      // no way to cancel a response from the UI at all.
+      if (isStreaming) {
+        cancelStream();
+      } else {
+        sendMessage();
+      }
     });
   } else {
     console.warn('[Chat] sendBtn not found during bindEvents');
@@ -659,6 +666,14 @@ function setupInputAutoResize() {
 }
 
 function handleInputKeydown(event) {
+  // Esc cancels an in-flight response; nothing else did until now
+  if (event.key === 'Escape' && isStreaming) {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelStream();
+    return;
+  }
+
   // Don't send during IME composition
   if (event.target.dataset.composing === 'true') return;
 
@@ -680,9 +695,10 @@ async function sendMessage() {
   if (!text && attachedImages.length === 0) return;
   if (isStreaming) return;
 
-  // Create conversation if needed
+  // Create conversation if needed - tagged with the model being used, so the
+  // sidebar and exports do not show "unknown" for every conversation
   if (!currentConversationId) {
-    const conv = await window.sidebar?.createNewConversation();
+    const conv = await window.sidebar?.createNewConversation('New Chat', currentModel);
     if (!conv) return;
     currentConversationId = conv.id;
   }
@@ -962,37 +978,49 @@ function addMessageMeta(messageEl, canceled = false) {
 }
 
 async function regenerateLastResponse() {
-  // Find last user message
-  const messages = elements.messages?.querySelectorAll('.message');
-  let lastUserMsg = null;
-  let lastAssistantMsg = null;
+  if (isStreaming) return; // a second stream would fight the first one
+  if (!currentConversationId) return;
 
+  // Ask main for the stored conversation rather than scraping the DOM: the
+  // user message's images only exist there, and disk is the source of truth.
+  let stored = null;
+  try {
+    stored = await kayAPI.conversations.get(currentConversationId);
+  } catch (error) {
+    console.error('[Chat] Regenerate: load failed:', error);
+  }
+  const messages = stored?.conversation?.messages || [];
+
+  let lastUserIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].dataset.role === 'user' && !lastUserMsg) {
-      lastUserMsg = messages[i];
-    } else if (messages[i].dataset.role === 'assistant' && !lastAssistantMsg) {
-      lastAssistantMsg = messages[i];
-    }
-    if (lastUserMsg && lastAssistantMsg) break;
+    if (messages[i].role === 'user') { lastUserIdx = i; break; }
+  }
+  if (lastUserIdx === -1) return;
+
+  const lastUser = messages[lastUserIdx];
+
+  // Drop the user turn and everything after it; streaming re-adds the user
+  // message, so nothing is duplicated on disk (the old flow appended it a
+  // second time and left the stale answer in the history).
+  const result = await kayAPI.conversations.update(currentConversationId, {
+    messages: messages.slice(0, lastUserIdx),
+  });
+  if (!result.success) {
+    showToast(result.error || 'Regenerate failed', 'error');
+    return;
   }
 
-  if (!lastUserMsg || !currentConversationId) return;
+  // Mirror the trim in the DOM
+  const nodes = Array.from(elements.messages?.children || []);
+  nodes.slice(-(messages.length - lastUserIdx)).forEach(node => node.remove());
 
-  // Get user message content
-  const userContent = lastUserMsg.querySelector('.message-text')?.dataset.rawContent ||
-                       lastUserMsg.querySelector('.message-text')?.textContent || '';
-
-  // Remove last assistant message
-  lastAssistantMsg.remove();
-
-  // Re-send
   isStreaming = true;
   updateSendButtonState();
 
   kayAPI.chat.streamMessage(
     currentConversationId,
-    userContent,
-    [], // Images not stored for regeneration
+    lastUser.content,
+    lastUser.images || [],
     currentModel,
     currentSystemPrompt
   );
@@ -1058,10 +1086,22 @@ function showWelcomeScreen() {
   clearElement(elements.messages);
 }
 
-function clearCurrentChat() {
+async function clearCurrentChat() {
   if (!currentConversationId) return;
+  if (isStreaming) {
+    showToast('Wait for Kay to finish responding first', 'warning');
+    return;
+  }
 
-  if (!confirm('Clear all messages in this conversation?')) return;
+  if (!confirm('Clear all messages in this conversation? This cannot be undone.')) return;
+
+  // Persist the clear - this used to only wipe the DOM, so every message
+  // came straight back on reload or when the conversation was reselected.
+  const result = await kayAPI.conversations.update(currentConversationId, { messages: [] });
+  if (!result.success) {
+    showToast(result.error || 'Failed to clear conversation', 'error');
+    return;
+  }
 
   clearElement(elements.messages);
   showWelcomeScreen();
@@ -1096,12 +1136,9 @@ function scrollToBottom() {
 
 function updateSendButtonState() {
   if (elements.sendBtn) {
-    elements.sendBtn.disabled = isStreaming;
-    if (isStreaming) {
-      elements.sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-    } else {
-      elements.sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
-    }
+    elements.sendBtn.classList.toggle('loading', isStreaming);
+    elements.sendBtn.setAttribute('aria-label', isStreaming ? 'Stop response' : 'Send message');
+    elements.sendBtn.title = isStreaming ? 'Stop (Esc cancels)' : 'Send';
   }
 }
 

@@ -44,6 +44,9 @@ export async function initApp() {
     // 4. Wire global event listeners
     wireGlobalListeners();
 
+    // 5. Wire header buttons (theme toggle, minimize to tray)
+    wireHeaderButtons();
+
     // 5. Set up window event listeners
     setupWindowEvents();
 
@@ -79,10 +82,9 @@ async function applyInitialSettings() {
       kayAPI.window.setOpacity(settings.windowOpacity);
     }
 
-    // Apply always on top
-    if (settings.alwaysOnTop !== false) {
-      kayAPI.window.setAlwaysOnTop(true);
-    }
+    // Apply always on top - both states. The old code only ever applied
+    // `true`, so a stored `false` was never honoured after a restart.
+    kayAPI.window.setAlwaysOnTop(settings.alwaysOnTop !== false);
 
   } catch (error) {
     console.error('[App] Apply settings failed:', error);
@@ -96,6 +98,28 @@ function applyTheme(theme) {
   } else {
     root.setAttribute('data-theme', theme);
   }
+}
+
+function wireHeaderButtons() {
+  // Theme button: cycle light -> dark -> system. The settings modal radios
+  // stay in sync through the settings:changed round trip. This button
+  // previously had no handler at all - clicking it did nothing.
+  document.getElementById('themeBtn')?.addEventListener('click', async () => {
+    try {
+      const settings = await kayAPI.settings.get();
+      const current = settings?.theme || 'system';
+      const next = current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system';
+      await kayAPI.settings.set('theme', next);
+      utils.showToast(next === 'system' ? 'Theme: system default' : `Theme: ${next}`, 'info');
+    } catch (error) {
+      console.error('[App] Theme toggle failed:', error);
+    }
+  });
+
+  // Minimize button: hide to tray. Also previously dead.
+  document.getElementById('minimizeBtn')?.addEventListener('click', () => {
+    kayAPI.window.hide();
+  });
 }
 
 // ============================================================================
@@ -249,12 +273,15 @@ window.addEventListener('unhandledrejection', (event) => {
 // Development Helpers
 // ============================================================================
 
-// Expose modules to window for debugging
+// Expose modules to window for debugging. Getters, because the module
+// references are assigned during the async initApp() - snapshotting them at
+// module-eval time left window.kay.sidebar/chat/settings permanently
+// undefined.
 window.kay = {
   utils,
-  sidebar: window.sidebar,
-  chat: window.chat,
-  settings: window.settings,
+  get sidebar() { return window.sidebar; },
+  get chat() { return window.chat; },
+  get settings() { return window.settings; },
   windowResize: { init: initWindowResize, cleanup: cleanupWindowResize },
   kayAPI,
 };

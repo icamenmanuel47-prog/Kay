@@ -193,10 +193,14 @@
           </div>
           <div class="input-footer">
             <span class="input-hint" id="inputHint">Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line</span>
-            <button class="primary-btn send-btn" id="sendBtn" aria-label="Send message">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="primary-btn send-btn" id="sendBtn" aria-label="Send message" title="Send">
+              <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="22" y1="2" x2="11" y2="13"/>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+              <svg class="stop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="4" width="4" height="16"/>
+                <rect x="14" y="4" width="4" height="16"/>
               </svg>
             </button>
           </div>
@@ -339,7 +343,7 @@
                 <div class="btn-group">
                   <button class="primary-btn" id="checkUpdatesBtn">Check for Updates Now</button>
                 </div>
-                <p class="setting-hint">Current version: <span id="currentVersion">1.0.0</span></p>
+                <p class="setting-hint">Current version: <span id="currentVersion">…</span></p>
                 <p class="setting-hint">Kay does not install updates automatically. Check the project's GitHub releases page for new versions.</p>
               </div>
               <div class="setting-group">

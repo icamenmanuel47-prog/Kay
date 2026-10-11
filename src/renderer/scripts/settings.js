@@ -3,7 +3,7 @@
  * Handles settings modal: tabs, forms, API key, hotkey recorder, theme, opacity
  */
 
-import { $, $$, createElement, clearElement, parseHotkey, showToast } from './utils.js';
+import { $, $$, createElement, clearElement, parseHotkey, showToast, debounce } from './utils.js';
 
 // kayAPI is exposed via contextBridge on window object by preload
 const kayAPI = window.kayAPI;
@@ -151,6 +151,13 @@ function bindEvents() {
     kayAPI.app.setLaunchAtStartup(e.target.checked);
   });
 
+  // General: Notifications (this toggle had no listener at all - it was read
+  // on load and never persisted, and nothing consumed the setting either)
+  elements.showNotifications?.addEventListener('change', (e) => {
+    if (currentSettings) currentSettings.showNotifications = e.target.checked;
+    kayAPI.settings.set('showNotifications', e.target.checked);
+  });
+
   // API: API Key visibility toggle
   elements.toggleApiKeyVisibility?.addEventListener('click', toggleApiKeyVisibility);
 
@@ -163,7 +170,10 @@ function bindEvents() {
     kayAPI.settings.set('defaultModel', e.target.value);
   });
 
-  // API: System prompt
+  // API: System prompt - persist edits as they are typed. There was no
+  // listener here at all, so a user-edited prompt was silently discarded;
+  // only "Reset to Default" ever reached disk.
+  elements.systemPromptInput?.addEventListener('input', debounce(saveSystemPrompt, 600));
   elements.resetSystemPromptBtn?.addEventListener('click', resetSystemPrompt);
 
   // Appearance: Theme
@@ -183,10 +193,16 @@ function bindEvents() {
     kayAPI.settings.set('windowOpacity', value / 100);
   });
 
-  // Appearance: Always on top
+  // Appearance: Always on top - set to the checkbox's value. Toggling used to
+  // invert whatever the window happened to be, so a single desync made the
+  // checkbox and the real state disagree permanently.
   elements.alwaysOnTop?.addEventListener('change', (e) => {
-    kayAPI.window.toggleAlwaysOnTop().then(result => {
-      kayAPI.settings.set('alwaysOnTop', result.alwaysOnTop);
+    const enabled = e.target.checked;
+    kayAPI.window.setAlwaysOnTop(enabled).then(result => {
+      if (currentSettings) currentSettings.alwaysOnTop = result.alwaysOnTop;
+    }).catch((error) => {
+      console.error('[Settings] Always on top failed:', error);
+      e.target.checked = !enabled; // revert the visual state
     });
   });
 
@@ -235,7 +251,9 @@ export function closeModal() {
 }
 
 function saveAndClose() {
-  // Settings are saved in real-time, just close
+  // Other settings save in real time; flush any pending prompt edit (the
+  // debounce may not have fired yet) before the modal goes away.
+  saveSystemPrompt();
   closeModal();
 }
 
@@ -282,7 +300,7 @@ async function loadSettings() {
     elements.alwaysOnTop.checked = result.alwaysOnTop !== false;
 
     // Advanced
-    elements.currentVersion.textContent = result.version || '1.0.0';
+    elements.currentVersion.textContent = result.version || 'dev';
 
     // Encryption status
     const encryptionAvailable = await kayAPI.settings.encryptionAvailable();
@@ -312,9 +330,28 @@ function updateApiKeyStatus(hasKey) {
 function populateModelSelect(selectedModel) {
   if (!elements.defaultModelSelect) return;
 
-  // Get models from chat module (they should be cached)
-  // For now, just set the value - the chat module will populate via model list
-  elements.defaultModelSelect.value = selectedModel || '';
+  // The dropdown had no <option>s at all - it was permanently empty and its
+  // change listener could never fire. Populate it from the same model list
+  // the chat picker uses.
+  kayAPI.chat.getModels().then(result => {
+    const models = result?.models || [];
+    if (models.length === 0) return; // keep whatever is currently selected
+
+    const previous = selectedModel || elements.defaultModelSelect.value;
+    clearElement(elements.defaultModelSelect);
+
+    [...models]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(model => {
+        const option = createElement('option', { value: model.id },
+          `${model.name}${model.isFree ? ' (free)' : ''}`);
+        elements.defaultModelSelect.appendChild(option);
+      });
+
+    if (previous) elements.defaultModelSelect.value = previous;
+  }).catch(error => {
+    console.error('[Settings] Model list unavailable:', error);
+  });
 }
 
 function setThemeRadio(theme) {
@@ -501,10 +538,31 @@ async function deleteApiKey() {
   }
 }
 
+let systemPromptSaveTimer = null;
+
+function saveSystemPrompt() {
+  if (systemPromptSaveTimer) {
+    clearTimeout(systemPromptSaveTimer);
+    systemPromptSaveTimer = null;
+  }
+  if (!elements.systemPromptInput || !currentSettings) return;
+
+  const value = elements.systemPromptInput.value;
+  if (value === (currentSettings.systemPrompt || defaultSystemPrompt)) return;
+
+  currentSettings.systemPrompt = value;
+  kayAPI.settings.set('systemPrompt', value);
+}
+
 function resetSystemPrompt() {
   if (!confirm('Reset system prompt to default?')) return;
 
+  if (systemPromptSaveTimer) {
+    clearTimeout(systemPromptSaveTimer);
+    systemPromptSaveTimer = null;
+  }
   elements.systemPromptInput.value = defaultSystemPrompt;
+  if (currentSettings) currentSettings.systemPrompt = defaultSystemPrompt;
   kayAPI.settings.set('systemPrompt', defaultSystemPrompt);
   showToast('System prompt reset', 'success');
 }
