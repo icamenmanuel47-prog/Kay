@@ -6,18 +6,29 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows matters here: path handling, the test glob and the native
+        # module all behave differently from Linux, and the previous workflow
+        # only ever ran on ubuntu (and had never run at all, since the repo
+        # had no remote).
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
 
-      # --ignore-scripts keeps install side effects (uiohook-napi's postinstall,
-      # if any) out of CI; these tests are plain `node --test` and never launch
-      # Electron or load native modules.
+      # --ignore-scripts keeps install side effects (uiohook-napi's postinstall
+      # rebuild, Electron's binary download) out of CI; these tests are plain
+      # `node --test` and never launch Electron or load native modules - the
+      # Electron API is shimmed in tests/helpers/electron-shim.mjs.
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
@@ -27,8 +38,38 @@ jobs:
       - name: Syntax check
         shell: pwsh
         run: |
+          $failed = $false
           Get-ChildItem -Path src -Recurse -Include *.js |
             ForEach-Object {
               node --check $_.FullName
-              if ($LASTEXITCODE -ne 0) { exit 1 }
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
             }
+          if ($failed) { exit 1 }
+
+  # Packaging is where Electron apps most often break silently, so build the
+  # unpacked directory once per push rather than only at release time.
+  build:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build unpacked app
+        run: npm run dist:dir
+
+      - name: Upload unpacked build
+        uses: actions/upload-artifact@v4
+        with:
+          name: kay-win-unpacked
+          path: dist/win-unpacked/
+          retention-days: 7
