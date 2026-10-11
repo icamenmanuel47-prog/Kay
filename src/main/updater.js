@@ -47,15 +47,37 @@ function notifyRenderer(event, data = {}) {
   sendToRenderer('updater:' + event, data);
 }
 
+// electron-updater needs app-update.yml, which electron-builder only writes
+// into a packaged build. Under `electron .` the check would throw a confusing
+// "no published versions" error, so name the situation instead.
+function isPackaged() {
+  try {
+    const { app } = require('electron');
+    return app.isPackaged === true;
+  } catch {
+    return false;
+  }
+}
+
 // Check for updates.
 //
 // Returns a result rather than only firing events, so callers can tell the
 // user what happened - the renderer never subscribed to the updater event
 // channels, which is why a manual check used to end in silence.
 //
+// When an update exists it is downloaded in the background straight away;
+// autoInstallOnAppQuit then applies it on the next quit, so the user only
+// ever needs one click. Progress and completion arrive as updater:* events.
+//
 // @param {boolean} manual true when triggered by the user
-// @returns {Promise<{success: boolean, error?: string, updateAvailable?: boolean, version?: string}>}
+// @returns {Promise<{success: boolean, error?: string, updateAvailable?: boolean, version?: string, downloading?: boolean}>}
 async function checkForUpdates(manual = false) {
+  if (!isPackaged()) {
+    const error = 'Updates can only be checked from the installed app.';
+    if (manual) notifyRenderer('error', { message: error });
+    return { success: false, error };
+  }
+
   try {
     const result = await autoUpdater.checkForUpdates();
     const updateInfo = result?.updateInfo;
@@ -64,7 +86,23 @@ async function checkForUpdates(manual = false) {
       && updateInfo.version
       && updateInfo.version !== autoUpdater.currentVersion
     );
-    return { success: true, updateAvailable: available, version: updateInfo?.version };
+
+    if (available) {
+      // Deliberately not awaited: downloading can take a while and the caller
+      // only needs to know an update exists. Failures surface through the
+      // updater:error event and this promise's own catch.
+      autoUpdater.downloadUpdate().catch((error) => {
+        console.warn('[Updater] Background download failed:', error.message);
+        notifyRenderer('error', { message: `Download failed: ${error.message}` });
+      });
+    }
+
+    return {
+      success: true,
+      updateAvailable: available,
+      version: updateInfo?.version,
+      downloading: available,
+    };
   } catch (error) {
     if (manual) {
       notifyRenderer('error', { message: error.message });

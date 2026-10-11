@@ -127,10 +127,10 @@ function wireHeaderButtons() {
 // ============================================================================
 
 function wireGlobalListeners() {
-  // Conversation list changes
-  kayAPI.onConversationListChanged(() => {
-    window.sidebar?.refresh();
-  });
+  // Conversation list changes are handled by the sidebar module, which re-runs
+  // an active search instead of clobbering it. Registering a second listener
+  // here did the same work twice and undid that (window.sidebar.refresh()
+  // re-renders the full list).
 
   // Settings changes
   kayAPI.onSettingsChanged(async (settings) => {
@@ -147,6 +147,22 @@ function wireGlobalListeners() {
     if (settings.systemPrompt) {
       // Handled by chat module
     }
+  });
+
+  // Updater events. Main downloads an update in the background once a check
+  // finds one, and installs it on the next quit - these toasts are how the
+  // user learns that happened. Previously nothing subscribed, so the flow
+  // ended silently.
+  kayAPI.onUpdaterEvent('downloaded', (info) => {
+    utils.showToast(
+      `Update ${info?.version || ''} ready - it will install the next time you quit Kay.`,
+      'success'
+    );
+  });
+  kayAPI.onUpdaterEvent('error', (data) => {
+    // Only meaningful when a check is in flight; the settings screen reports
+    // its own synchronous failures, so avoid double-toasting those.
+    if (data?.message) utils.showToast(data.message, 'error');
   });
 
   // Hotkey changes
@@ -241,6 +257,7 @@ function cleanup() {
   kayAPI.removeAllListeners('window:hidden');
   kayAPI.removeAllListeners('app:state-changed');
   kayAPI.removeAllListeners('updater:error');
+  kayAPI.removeAllListeners('updater:downloaded');
 
   // Cleanup window resize handler
   cleanupWindowResize();

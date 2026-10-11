@@ -9,9 +9,14 @@
   },
   "files": [
     "src/**/*",
-    "node_modules/**/*",
     "package.json"
   ],
+  "publish": {
+    "provider": "github",
+    "owner": "icamenmanuel47-prog",
+    "repo": "Kay",
+    "releaseType": "release"
+  },
   "win": {
     "target": [
       {

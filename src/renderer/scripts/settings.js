@@ -214,7 +214,14 @@ function bindEvents() {
       if (!result?.success) {
         showToast(result?.error || 'Update check failed', 'error');
       } else if (result.updateAvailable) {
-        showToast(`Update available: ${result.version}`, 'success');
+        // Main downloads it in the background; completion arrives as an
+        // updater:downloaded event (see app.js wireGlobalListeners).
+        showToast(
+          result.downloading
+            ? `Kay ${result.version} is available - downloading...`
+            : `Kay ${result.version} is available`,
+          'success'
+        );
       } else {
         showToast('Kay is up to date', 'success');
       }

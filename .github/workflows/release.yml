@@ -1,0 +1,53 @@
+name: Release
+
+# Publishes a Windows build to GitHub Releases when a version tag is pushed.
+# electron-updater reads that release feed (see the publish block in
+# electron-builder.json), so this workflow is what makes in-app updates work.
+#
+#   git tag v1.2.0
+#   git push origin v1.2.0
+#
+# Builds are unsigned (no code-signing certificate is configured), so
+# Windows SmartScreen may warn on the installer until it accumulates
+# reputation - see README.md.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build and publish to GitHub Releases
+        run: npm run dist -- --publish always
+        env:
+          # electron-builder authenticates to the GitHub API with this token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Never go looking for a signing identity: there is no certificate.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload installer artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kay-installer
+          path: dist/*.exe
+          retention-days: 14
