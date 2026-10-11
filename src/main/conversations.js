@@ -48,7 +48,6 @@ function setupConversations() {
         .filter(f => f.endsWith('.json'))
         .map(f => {
           const filePath = path.join(CONVERSATIONS_DIR, f);
-          const stat = fs.statSync(filePath);
           try {
             const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             return {
@@ -90,15 +89,25 @@ function setupConversations() {
   });
 
   // Create new conversation
-  ipcMain.handle('conversations:create', (_, title = 'New Chat', model = 'nvidia/nemotron-3-ultra-550b-a55b:free') => {
+  ipcMain.handle('conversations:create', (_, title, model) => {
     try {
       ensureDir();
       const id = generateId();
       const now = new Date().toISOString();
+      // The renderer chooses both of these. The default parameters only apply
+      // to `undefined`, so passing `null` (which the chat module did) used to
+      // store a model-less conversation that the sidebar then rendered as
+      // "unknown". Treat anything that is not a non-empty string as unset.
+      const safeTitle = typeof title === 'string' && title.trim()
+        ? title.trim().slice(0, 100)
+        : 'New Chat';
+      const safeModel = typeof model === 'string' && model.trim()
+        ? model.trim()
+        : 'nvidia/nemotron-3-ultra-550b-a55b:free';
       const conversation = {
         id,
-        title,
-        model,
+        title: safeTitle,
+        model: safeModel,
         messages: [],
         createdAt: now,
         updatedAt: now,
@@ -176,10 +185,14 @@ function setupConversations() {
         md += `---\n\n`;
       }
 
-      // Save dialog
+      // Save dialog. The title is renderer-supplied, so strip anything that
+      // could turn it into a path before using it as a default filename.
       const win = require('./window').getWindow();
+      const safeName = String(conversation.title || 'conversation')
+        .replace(/[\\/:*?"<>|]/g, '_')
+        .slice(0, 80);
       const result = await dialog.showSaveDialog(win, {
-        defaultPath: `${conversation.title}.md`,
+        defaultPath: `${safeName}.md`,
         filters: [{ name: 'Markdown', extensions: ['md'] }],
       });
 
@@ -241,9 +254,9 @@ function setupConversations() {
 
 function getPreview(messages) {
   if (!messages || messages.length === 0) return 'No messages yet';
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
-  const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
-  const preview = lastUserMsg || lastAssistantMsg;
+  // The most recent message with actual content - previously this preferred
+  // the newest *user* message, so the preview stayed stale after Kay replied.
+  const preview = [...messages].reverse().find(m => m.content && m.content.trim());
   if (!preview) return 'No messages yet';
   const text = preview.content.substring(0, 100);
   return text + (preview.content.length > 100 ? '...' : '');
@@ -267,8 +280,11 @@ function addMessage(conversationId, message) {
       timestamp: new Date().toISOString(),
     });
     conversation.updatedAt = new Date().toISOString();
-    // Auto-generate title from first user message
-    if (conversation.messages.length === 1 && message.role === 'user') {
+    // Auto-generate the title from the first user message - but only while the
+    // title is still the placeholder, so a name the user gave the
+    // conversation before sending anything is not clobbered.
+    const isDefaultTitle = !conversation.title || conversation.title === 'New Chat';
+    if (conversation.messages.length === 1 && message.role === 'user' && isDefaultTitle) {
       conversation.title = message.content.substring(0, 50) + (message.content.length > 50 ? '...' : '');
     }
     fs.writeFileSync(filePath, JSON.stringify(conversation, null, 2));
@@ -343,7 +359,13 @@ function finalizeAssistantUpdate(conversationId, content) {
     pendingAssistantWrites.delete(conversationId);
   }
   if (!content) return false;
-  return updateLastAssistantMessage(conversationId, content);
+  const wrote = updateLastAssistantMessage(conversationId, content);
+  // The sidebar preview/messageCount only refresh on list-changed, which no
+  // streaming path emitted - so they stayed stale after every completed
+  // response. Throttled writes deliberately do not notify (that would be a
+  // list reload every 300ms); only the terminal write does.
+  if (wrote) notifyListChanged();
+  return wrote;
 }
 
 /**

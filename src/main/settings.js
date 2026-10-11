@@ -118,12 +118,14 @@ function getSettings() {
 
 /**
  * Settings as the renderer is allowed to see them: the API key is replaced
- * with a placeholder rather than decrypted, plus a hasApiKey flag.
+ * with a placeholder rather than decrypted, plus a hasApiKey flag and the
+ * app version (the settings dialog shows it).
  */
 function getSettingsForRenderer() {
   const settings = { ...store.store };
   settings.hasApiKey = !!settings.apiKey;
   settings.apiKey = settings.apiKey ? '***' : null;
+  settings.version = app.getVersion();
   return settings;
 }
 

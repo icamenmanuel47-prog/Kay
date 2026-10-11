@@ -1,7 +1,7 @@
 const { ipcMain, dialog, shell, app } = require('electron');
 const fs = require('fs');
 const { getSettings, getSettingsForRenderer, onSettingsChanged, setSetting, setApiKey, deleteApiKey, getHotkey, isEncryptionAvailable, resetSettings } = require('./settings');
-const { updateHotkey } = require('./hotkey');
+const { updateHotkey, unregisterHotkey } = require('./hotkey');
 const { hideWindow, getWindow, setWindowOpacity, setAlwaysOnTop, isWindowOnTop } = require('./window');
 const { toggleOnOff } = require('./tray');
 const { checkForUpdates } = require('./updater');
@@ -64,6 +64,12 @@ function setupIpc() {
   // Reset all data
   ipcMain.handle('app:reset-all-data', () => {
     try {
+      // Stop everything that survives a settings reset first: the global
+      // hotkey and the visible window, so the app does not come back
+      // half-configured after the restart.
+      unregisterHotkey();
+      hideWindow();
+
       // Reset settings (clears store and API key)
       resetSettings();
 
@@ -74,6 +80,12 @@ function setupIpc() {
 
       // Reset app state
       setSetting('isOn', false);
+
+      // The sidebar still lists the deleted conversations until told otherwise
+      const win = getWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('conversations:list-changed');
+      }
 
       return { success: true };
     } catch (error) {
@@ -153,8 +165,12 @@ function setupIpc() {
   });
 
   ipcMain.handle('window:set-opacity', (_, opacity) => {
-    setWindowOpacity(opacity);
-    return { opacity };
+    // Mirror the clamp in setWindowOpacity so the renderer never believes an
+    // opacity the window does not actually have.
+    const numeric = Number(opacity);
+    const clamped = Number.isFinite(numeric) ? Math.max(0.3, Math.min(1, numeric)) : 0.95;
+    setWindowOpacity(clamped);
+    return { opacity: clamped };
   });
 
   ipcMain.handle('window:get-bounds', () => {

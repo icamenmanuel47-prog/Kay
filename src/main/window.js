@@ -1,11 +1,9 @@
-const { BrowserWindow, screen, ipcMain } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const path = require('path');
-const { getSetting, setSetting } = require('./settings');
 const { getIsQuitting } = require('./state');
 const { getAppIcon } = require('./app-icon');
 
 let mainWindow = null;
-let isWindowVisible = false;
 
 // move/resize fire on every pixel of a drag. Persisting each one would write
 // the settings file, notify the tray and send IPC continuously for a value
@@ -63,17 +61,19 @@ function createWindow() {
     ...(appIcon ? { icon: appIcon } : {}),
   });
 
-  // Load the renderer
+  // Load the renderer. A failed load is worth surfacing instead of leaving an
+  // invisible, apparently-alive window behind.
   const isDev = process.argv.includes('--dev');
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'))
+    .catch((error) => console.error('[Window] Failed to load renderer:', error));
   if (isDev) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
-  // Prevent navigation
-  mainWindow.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('file://')) e.preventDefault();
-  });
+  // NOTE: navigation and window.open are guarded centrally in index.js via
+  // web-contents-created, using the tested classifier in navigation.js. An
+  // earlier local will-navigate guard here allowed *any* file:// URL and only
+  // worked while the stricter listener also happened to be installed.
 
   // Handle window state changes
   mainWindow.on('close', (e) => {
@@ -85,11 +85,6 @@ function createWindow() {
 
   mainWindow.on('move', saveBounds);
   mainWindow.on('resize', saveBounds);
-
-  // Handle theme changes
-  ipcMain.on('theme:changed', (_, theme) => {
-    setSetting('theme', theme);
-  });
 
   return mainWindow;
 }
@@ -131,7 +126,6 @@ function showWindow() {
   if (mainWindow && !mainWindow.isVisible()) {
     mainWindow.show();
     mainWindow.focus();
-    isWindowVisible = true;
     mainWindow.webContents.send('window:shown');
   }
 }
@@ -141,7 +135,6 @@ function hideWindow() {
     // Persist the final position now rather than leaving it to the debounce.
     flushPendingBounds();
     mainWindow.hide();
-    isWindowVisible = false;
     mainWindow.webContents.send('window:hidden');
   }
 }
@@ -158,7 +151,9 @@ function toggleWindow() {
 
 function setWindowOpacity(opacity) {
   if (mainWindow) {
-    const clampedOpacity = Math.max(0.3, Math.min(1, opacity));
+    const numeric = Number(opacity);
+    if (!Number.isFinite(numeric)) return;
+    const clampedOpacity = Math.max(0.3, Math.min(1, numeric));
     mainWindow.setOpacity(clampedOpacity);
     require('./settings').setSetting('windowOpacity', clampedOpacity);
   }

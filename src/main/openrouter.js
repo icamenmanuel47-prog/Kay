@@ -234,6 +234,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
         win.webContents.send('chat:stream-end', { conversationId, content: fullContent });
       }
       finalizeAssistantUpdate(conversationId, fullContent);
+      notifyIfAway(fullContent);
     }
 
   } catch (error) {
@@ -275,6 +276,25 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     if (abortController && abortController.signal === signal) {
       abortController = null;
     }
+  }
+}
+
+/**
+ * Desktop notification for a finished response, honouring the
+ * showNotifications setting. Only fires while the window is away - notifying
+ * someone who is already looking at the answer is just noise.
+ */
+function notifyIfAway(content) {
+  try {
+    if (!getSetting('showNotifications')) return;
+    const win = require('./window').getWindow();
+    if (win && win.isVisible()) return;
+    const { Notification } = require('electron');
+    if (!Notification.isSupported()) return;
+    const body = String(content || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    new Notification({ title: 'Kay', body: body || 'Kay finished responding' }).show();
+  } catch (error) {
+    // Notifications are best-effort; never let them break the stream path.
   }
 }
 
