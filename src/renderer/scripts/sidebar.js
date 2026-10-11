@@ -378,9 +378,27 @@ function handleDelete(conv) {
 // Keyboard Navigation
 // ============================================================================
 
+/**
+ * True for anything the user types into: the sidebar handler must never
+ * steal keys from these. The previous version only excluded the sidebar
+ * search box, so arrow keys stopped moving the caret in the message
+ * textarea, `Delete` opened the delete-conversation confirm and `Enter`
+ * was swallowed - all while the user was typing.
+ */
+function isEditableTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return !!el.isContentEditable;
+}
+
 function setupKeyboardNavigation() {
   document.addEventListener('keydown', (e) => {
-    if (e.target === elements.search) return; // Don't interfere with search input
+    // Respect handlers that already consumed the event (e.g. Enter to send)
+    if (e.defaultPrevented) return;
+    // Never intercept typing, or keys pressed while the settings modal is open
+    if (isEditableTarget(e.target)) return;
+    if (document.querySelector('#settingsModal.visible')) return;
 
     const items = $$('.conversation-item:not(.empty)', elements.list);
     if (items.length === 0) return;
@@ -388,19 +406,21 @@ function setupKeyboardNavigation() {
     const currentIndex = Array.from(items).findIndex(el => el.dataset.id === selectedConversationId);
 
     switch (e.key) {
-      case 'ArrowDown':
+      case 'ArrowDown': {
         e.preventDefault();
         const nextIndex = currentIndex >= 0 ? Math.min(currentIndex + 1, items.length - 1) : 0;
         selectConversation(items[nextIndex].dataset.id);
         items[nextIndex].focus();
         break;
+      }
 
-      case 'ArrowUp':
+      case 'ArrowUp': {
         e.preventDefault();
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
         selectConversation(items[prevIndex].dataset.id);
         items[prevIndex].focus();
         break;
+      }
 
       case 'Enter':
         if (currentIndex >= 0) {
