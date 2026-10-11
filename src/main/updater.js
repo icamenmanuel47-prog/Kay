@@ -1,6 +1,6 @@
 const { autoUpdater } = require('electron-updater');
 const { dialog } = require('electron');
-const { getWindow } = require('./window');
+const { sendToRenderer } = require('./window');
 const { getSetting } = require('./settings');
 
 function setupUpdater() {
@@ -44,10 +44,7 @@ function setupUpdater() {
 }
 
 function notifyRenderer(event, data = {}) {
-  const win = getWindow();
-  if (win) {
-    win.webContents.send('updater:' + event, data);
-  }
+  sendToRenderer('updater:' + event, data);
 }
 
 // Check for updates.

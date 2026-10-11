@@ -12,6 +12,12 @@ const SAVE_BOUNDS_DELAY_MS = 300;
 let boundsTimer = null;
 let pendingBounds = null;
 
+// Minimum window dimensions. Duplicated in renderer/scripts/window-resize.js,
+// which enforces them during the drag; resizeWindow() re-enforces them at the
+// IPC boundary so the renderer cannot talk the window smaller than this.
+const MIN_WIDTH = 400;
+const MIN_HEIGHT = 500;
+
 function createWindow() {
   const settings = require('./settings').getSettings();
   const bounds = settings.windowBounds || { width: 500, height: 700 };
@@ -126,7 +132,7 @@ function showWindow() {
   if (mainWindow && !mainWindow.isVisible()) {
     mainWindow.show();
     mainWindow.focus();
-    mainWindow.webContents.send('window:shown');
+    sendToRenderer('window:shown');
   }
 }
 
@@ -135,7 +141,7 @@ function hideWindow() {
     // Persist the final position now rather than leaving it to the debounce.
     flushPendingBounds();
     mainWindow.hide();
-    mainWindow.webContents.send('window:hidden');
+    sendToRenderer('window:hidden');
   }
 }
 
@@ -147,6 +153,62 @@ function toggleWindow() {
       showWindow();
     }
   }
+}
+
+/**
+ * Send an IPC event to the renderer, safely.
+ *
+ * Every send in the main process used an ad-hoc `getWindow()` + null check,
+ * which still threw "Object has been destroyed" when the window existed but
+ * was mid-destruction - tray and hotkey events fire at any point, including
+ * during shutdown. One helper makes that guard uniform.
+ */
+function sendToRenderer(channel, ...args) {
+  if (
+    mainWindow
+    && !mainWindow.isDestroyed()
+    && !mainWindow.webContents.isDestroyed()
+  ) {
+    mainWindow.webContents.send(channel, ...args);
+  }
+}
+
+/**
+ * Resize the window to the given dimensions, keeping its current position.
+ *
+ * The renderer's resize handle sends only {width, height}, so the handler
+ * must merge that with the live bounds - passing a partial rect to setBounds
+ * is platform-dependent, and trusting renderer-supplied x/y would let a
+ * compromised renderer fling the window off-screen. Size is clamped to the
+ * display's work area.
+ */
+function resizeWindow(width, height) {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+
+  const current = mainWindow.getBounds();
+  const clamp = (value, fallback, min, max) => {
+    const numeric = Number(value);
+    const n = Number.isFinite(numeric) ? Math.round(numeric) : fallback;
+    return Math.max(min, Math.min(max, n));
+  };
+
+  const display = screen.getDisplayMatching(current);
+  const area = display.workArea;
+
+  const next = {
+    x: current.x,
+    y: current.y,
+    width: clamp(width, current.width, MIN_WIDTH, area.width),
+    height: clamp(height, current.height, MIN_HEIGHT, area.height),
+  };
+
+  // Keep at least the top-left corner inside the work area, so a window
+  // resized on one display cannot end up stranded off another.
+  next.x = Math.min(Math.max(next.x, area.x), area.x + area.width - next.width);
+  next.y = Math.min(Math.max(next.y, area.y), area.y + area.height - next.height);
+
+  mainWindow.setBounds(next);
+  return next;
 }
 
 function setWindowOpacity(opacity) {
@@ -184,4 +246,6 @@ module.exports = {
   setAlwaysOnTop,
   isWindowOnTop,
   flushPendingBounds,
+  resizeWindow,
+  sendToRenderer,
 };

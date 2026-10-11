@@ -1,9 +1,9 @@
 const { app, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
-const { showWindow, hideWindow, getWindow, toggleWindow } = require('./window');
+const { showWindow, hideWindow, getWindow, toggleWindow, sendToRenderer } = require('./window');
 const { getAppIcon } = require('./app-icon');
 const { getSettings, setSetting, onSettingsChanged } = require('./settings');
-const { registerHotkey, unregisterHotkey } = require('./hotkey');
+const { registerHotkey, unregisterHotkey, getLastFailureReason } = require('./hotkey');
 const { checkForUpdates } = require('./updater');
 
 let tray = null;
@@ -52,11 +52,9 @@ function buildMenu() {
       label: 'Settings',
       type: 'normal',
       click: () => {
+        sendToRenderer('open-settings');
         const win = getWindow();
-        if (win) {
-          win.webContents.send('open-settings');
-          if (!win.isVisible()) showWindow();
-        }
+        if (win && !win.isVisible()) showWindow();
       },
     },
     {
@@ -119,17 +117,36 @@ function toggleOnOff() {
 
   if (newState) {
     showWindow();
-    registerHotkey(settings.hotkey);
+    if (!registerHotkey(settings.hotkey)) {
+      // Previously silent: the window appeared, the app claimed to be "on",
+      // and the hotkey simply never worked. Say so.
+      const REASONS = {
+        unsafe: 'Global hotkeys need a modifier key or a function key.',
+        'unsupported-key': `Kay cannot listen for the key in "${settings.hotkey}".`,
+        'in-use': `"${settings.hotkey}" may already be registered by another application.`,
+      };
+      const detail = REASONS[getLastFailureReason()] || `"${settings.hotkey}" could not be registered.`;
+
+      try {
+        const { dialog } = require('electron');
+        dialog.showMessageBox({
+          type: 'warning',
+          title: 'Kay is on',
+          message: 'The global hotkey could not be registered',
+          detail: `${detail}\n\nKay will still run - only the keyboard shortcut is unavailable.`,
+          buttons: ['OK'],
+        });
+      } catch (error) {
+        console.warn('[Tray] Hotkey registration failed and the notice could not be shown:', error);
+      }
+    }
   } else {
     hideWindow();
     unregisterHotkey();
   }
 
   // Notify renderer
-  const win = getWindow();
-  if (win) {
-    win.webContents.send('app:state-changed', { isOn: newState });
-  }
+  sendToRenderer('app:state-changed', { isOn: newState });
 
   return newState;
 }

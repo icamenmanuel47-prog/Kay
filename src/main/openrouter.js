@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getApiKey, getSetting, getSettings } = require('./settings');
+const { isValidConversationId } = require('./conversation-fields');
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 let modelsCache = null;
@@ -12,20 +13,79 @@ let abortController = null;
 // setupOpenRouter's chat:stream handler for why this exists.
 let activeStreamId = 0;
 
+// Hard ceilings on the two outbound requests. A dropped connection mid-stream
+// would otherwise leave the reader awaiting forever, and a wedged models
+// fetch would leave the picker in a permanent loading state.
+const CHAT_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+const MODELS_REQUEST_TIMEOUT_MS = 30 * 1000;
+
+const MAX_MESSAGE_CHARS = 100000;
+const MAX_IMAGES = 6;
+
+/**
+ * chat:stream comes straight from the renderer over an unvalidated channel.
+ * Anything non-conforming is rejected here (with an error the UI can show)
+ * rather than reaching the network request or the conversation file.
+ *
+ * @returns {string|null} an error message, or null when the payload is fine
+ */
+function validateStreamArgs(conversationId, message, images, model) {
+  if (!isValidConversationId(conversationId)) return 'Invalid conversation id';
+  if (typeof message !== 'string' || message.trim().length === 0) return 'Message is empty';
+  if (message.length > MAX_MESSAGE_CHARS) return 'Message is too long';
+
+  if (images != null) {
+    if (!Array.isArray(images)) return 'Images must be an array';
+    if (images.length > MAX_IMAGES) return `At most ${MAX_IMAGES} images are supported`;
+    for (const img of images) {
+      // The renderer only ever attaches compressed data URLs; anything else
+      // is either a bug or an attempt to make main fetch an arbitrary URL.
+      if (typeof img !== 'string' || !img.startsWith('data:image/')) {
+        return 'Images must be embedded data URLs';
+      }
+    }
+  }
+
+  if (model != null && (typeof model !== 'string' || model.length > 200)) {
+    return 'Invalid model';
+  }
+
+  return null;
+}
+
 function setupOpenRouter() {
   // Stream a message
-  ipcMain.on('chat:stream', (_, conversationId, message, images, model, systemPrompt) => {
+  ipcMain.on('chat:stream', (event, conversationId, message, images, model, systemPrompt) => {
+    // Only the app's own renderer may stream. Without this, any webContents
+    // (including a future one opened by a bug) could drive the chat.
+    if (event.sender !== getWindow()?.webContents) return;
+
+    const invalid = validateStreamArgs(conversationId, message, images, model);
+    if (invalid) {
+      console.warn('[OpenRouter] Rejected chat:stream:', invalid);
+      require('./window').sendToRenderer('chat:stream-error', invalid, conversationId);
+      return;
+    }
+
+    const safeSystemPrompt = typeof systemPrompt === 'string' ? systemPrompt.slice(0, 20000) : '';
+    const safeImages = Array.isArray(images) ? images : [];
+
     const apiKey = getApiKey();
     if (!apiKey) {
       // The renderer already rendered the message optimistically, and main is
       // the only process that writes messages to disk - so persist it here or
       // it silently disappears on the next reload.
-      require('./conversations').addMessage(conversationId, { role: 'user', content: message, images });
+      require('./conversations').addMessage(conversationId, {
+        role: 'user',
+        content: message,
+        images: safeImages,
+      });
 
-      const win = require('./window').getWindow();
-      if (win) {
-        win.webContents.send('chat:stream-error', 'API key not set. Please configure in Settings.', conversationId);
-      }
+      require('./window').sendToRenderer(
+        'chat:stream-error',
+        'API key not set. Please configure in Settings.',
+        conversationId
+      );
       return;
     }
 
@@ -46,7 +106,21 @@ function setupOpenRouter() {
     // about to append.
     require('./conversations').cancelPendingAssistantUpdate(conversationId);
 
-    streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, controller.signal, streamId);
+    streamChatCompletion(
+      conversationId,
+      message,
+      safeImages,
+      model,
+      safeSystemPrompt,
+      apiKey,
+      controller.signal,
+      streamId
+    ).catch((error) => {
+      // streamChatCompletion has its own try/catch, but an exception before
+      // that (e.g. inside the conversations helpers) must still be logged
+      // instead of surfacing as an unhandled rejection.
+      console.error('[OpenRouter] Unhandled stream failure:', error);
+    });
   });
 
   // Cancel streaming
@@ -59,12 +133,17 @@ function setupOpenRouter() {
 
   // Get models list
   ipcMain.handle('chat:get-models', async () => {
-    const models = await fetchModels();
-    return { models };
+    // Errors now travel back to the caller: the picker and settings screen
+    // used to receive an empty list with no explanation on any network
+    // failure, which read as "Kay has no models".
+    return await fetchModels();
   });
 
   // Set favorite model
   ipcMain.handle('chat:set-favorite-model', (_, modelId, isFavorite) => {
+    if (typeof modelId !== 'string' || modelId.length === 0 || modelId.length > 200) {
+      return { success: false, error: 'Invalid model id' };
+    }
     const settings = getSettings();
     let favorites = settings.favoriteModels || [];
     if (isFavorite) {
@@ -143,7 +222,6 @@ function buildRequestWithHistory(historyMessages, currentMessage, images, model,
 }
 
 async function streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, signal, streamId) {
-  const win = require('./window').getWindow();
   const {
     addMessage,
     getConversationData,
@@ -152,6 +230,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     finalizeAssistantUpdate,
     flushPendingAssistantUpdates,
   } = require('./conversations');
+  const { sendToRenderer } = require('./window');
 
   // False once a newer message has taken over this conversation. A superseded
   // stream must not persist text or emit events for a conversation it no
@@ -174,6 +253,12 @@ async function streamChatCompletion(conversationId, message, images, model, syst
   try {
     const requestBody = buildRequestWithHistory(history, message, images, model, systemPrompt, true);
 
+    // The caller's signal lets the user cancel; the timeout catches a
+    // connection that dies without ever closing the socket.
+    const fetchSignal = typeof AbortSignal.any === 'function'
+      ? AbortSignal.any([signal, AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS)])
+      : signal;
+
     const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -183,7 +268,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
         'X-Title': 'Kay Assistant',
       },
       body: JSON.stringify(requestBody),
-      signal,
+      signal: fetchSignal,
     });
 
     if (!response.ok) {
@@ -194,45 +279,71 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let doneStreaming = false;
+
+    // SSE payloads are separated by blank lines and terminated by
+    // "data: [DONE]". The old loop only recognised `data: ` with a space,
+    // skipped (rather than stopped on) [DONE], and never handled a final
+    // event that arrived without a trailing newline - which silently
+    // dropped the last chunk of a response.
+    const handleLine = (line) => {
+      const trimmed = line.trim();
+      if (trimmed === '') return false;
+      if (!trimmed.startsWith('data:')) return false;
+
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]') return true;
+
+      try {
+        const parsed = JSON.parse(data);
+        // choices can be missing on keep-alive/usage frames
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (delta && isCurrent()) {
+          fullContent += delta;
+          sendToRenderer('chat:stream-chunk', { conversationId, chunk: delta });
+          // Throttled: this used to rewrite the entire conversation file
+          // once per token.
+          scheduleAssistantUpdate(conversationId, fullContent);
+        }
+      } catch (e) {
+        // Ignore malformed frames; a stream should not die over one line.
+      }
+      return false;
+    };
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
+
+      // SSE separates events with \r\n or \n; split on both.
+      const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices[0]?.delta?.content;
-            if (delta && isCurrent()) {
-              fullContent += delta;
-              // Send chunk to renderer
-              if (win) {
-                win.webContents.send('chat:stream-chunk', { conversationId, chunk: delta });
-              }
-              // Throttled: this used to rewrite the entire conversation file
-              // once per token.
-              scheduleAssistantUpdate(conversationId, fullContent);
-            }
-          } catch (e) {
-            // Ignore parse errors for incomplete chunks
-          }
+        if (handleLine(line)) {
+          doneStreaming = true;
+          break;
         }
       }
+      if (doneStreaming) break;
+    }
+
+    if (!doneStreaming) {
+      // Flush the decoder and process whatever was left in the buffer, in
+      // case the final event arrived without a trailing newline.
+      buffer += decoder.decode();
+      if (buffer && handleLine(buffer)) doneStreaming = true;
+    } else {
+      // Release the connection instead of leaving the rest of the body
+      // unread and the socket open.
+      reader.cancel().catch(() => {});
     }
 
     // Send final content
     if (isCurrent()) {
-      if (win) {
-        win.webContents.send('chat:stream-end', { conversationId, content: fullContent });
-      }
+      sendToRenderer('chat:stream-end', { conversationId, content: fullContent });
       finalizeAssistantUpdate(conversationId, fullContent);
       notifyIfAway(fullContent);
     }
@@ -243,9 +354,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     if (!isCurrent()) return;
 
     if (error.name === 'AbortError') {
-      if (win) {
-        win.webContents.send('chat:stream-end', { conversationId, content: fullContent, canceled: true });
-      }
+      sendToRenderer('chat:stream-end', { conversationId, content: fullContent, canceled: true });
       if (fullContent) {
         finalizeAssistantUpdate(conversationId, fullContent);
       } else {
@@ -253,9 +362,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
       }
     } else {
       console.error('Stream error:', error);
-      if (win) {
-        win.webContents.send('chat:stream-error', error.message, conversationId);
-      }
+      sendToRenderer('chat:stream-error', error.message, conversationId);
       if (fullContent) {
         // Keep whatever did arrive instead of dropping it on the floor, which
         // is what happened before when a stream failed part-way through.
@@ -298,14 +405,22 @@ function notifyIfAway(content) {
   }
 }
 
+/**
+ * Fetch the model list from OpenRouter, cached for an hour.
+ *
+ * Returns { models, error } so callers can tell the user why the list is
+ * empty instead of presenting a silent, permanently blank picker.
+ */
 async function fetchModels() {
   const now = Date.now();
   if (modelsCache && (now - modelsCacheTime) < CACHE_TTL) {
-    return modelsCache;
+    return { models: modelsCache, error: null };
   }
 
   try {
-    const response = await fetch(`${OPENROUTER_BASE}/models`);
+    const response = await fetch(`${OPENROUTER_BASE}/models`, {
+      signal: AbortSignal.timeout(MODELS_REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
@@ -325,27 +440,22 @@ async function fetchModels() {
     modelsCacheTime = now;
 
     // Notify renderer
-    const win = require('./window').getWindow();
-    if (win) {
-      win.webContents.send('chat:models', models);
-    }
+    require('./window').sendToRenderer('chat:models', models);
 
-    return models;
+    return { models, error: null };
   } catch (error) {
     console.error('Error fetching models:', error);
-    return modelsCache || [];
+    return {
+      models: modelsCache || [],
+      error: modelsCache
+        ? null // a stale list beats an error banner
+        : `Could not load models: ${error.message}`,
+    };
   }
-}
-
-// Helper to check if model supports images
-function modelSupportsImages(modelId) {
-  const model = modelsCache?.find(m => m.id === modelId);
-  return model?.supportsImages || false;
 }
 
 module.exports = {
   setupOpenRouter,
   fetchModels,
-  modelSupportsImages,
   OPENROUTER_BASE,
 };

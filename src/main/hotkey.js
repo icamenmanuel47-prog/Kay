@@ -1,6 +1,6 @@
 const { globalShortcut } = require('electron');
 const { setSetting } = require('./settings');
-const { toggleWindow, getWindow } = require('./window');
+const { toggleWindow } = require('./window');
 const {
   parseHotkey,
   toAccelerator,
@@ -20,6 +20,16 @@ let isRegistered = false;
  * One of: null | 'unsafe' | 'unsupported-key' | 'in-use'.
  */
 let lastFailureReason = null;
+
+/**
+ * The reason the last registerHotkey() call failed, for callers that want to
+ * explain it to the user (the tray's "Kay is on" notice).
+ *
+ * @returns {string|null}
+ */
+function getLastFailureReason() {
+  return lastFailureReason;
+}
 
 /**
  * Which mechanism is currently active - 'uiohook', 'globalShortcut' or null.
@@ -201,10 +211,7 @@ function updateHotkey(newHotkey) {
 
   if (success) {
     setSetting('hotkey', newHotkey);
-    const win = getWindow();
-    if (win) {
-      win.webContents.send('hotkey:changed', newHotkey);
-    }
+    require('./window').sendToRenderer('hotkey:changed', newHotkey);
     return { success: true, hotkey: newHotkey, reason: null };
   }
 
@@ -253,6 +260,7 @@ module.exports = {
   isHotkeyRegistered,
   getHotkeyDisplay,
   getRegistrationInfo,
+  getLastFailureReason,
   parseHotkey,
   toAccelerator,
 };

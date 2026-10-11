@@ -263,10 +263,7 @@ function getPreview(messages) {
 }
 
 function notifyListChanged() {
-  const win = require('./window').getWindow();
-  if (win) {
-    win.webContents.send('conversations:list-changed');
-  }
+  require('./window').sendToRenderer('conversations:list-changed');
 }
 
 // Helper to add a message to a conversation
