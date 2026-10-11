@@ -150,7 +150,7 @@
         </div>
 
         <!-- Messages Container -->
-        <div class="messages-container" id="messagesContainer" role="log" aria-live="polite">
+        <div class="messages-container" id="messagesContainer" role="log" aria-live="polite" hidden>
           <div class="messages" id="messages"></div>
           <div class="typing-indicator" id="typingIndicator" hidden>
             <span class="dot"></span>
@@ -205,7 +205,10 @@
     </div>
 
     <!-- Settings Modal -->
-    <div class="modal-overlay" id="settingsModal" hidden>
+    <!-- Shown/hidden via the .visible class (see components.css); it must NOT
+         use the hidden attribute, which is now globally honoured via
+         display:none !important in main.css. -->
+    <div class="modal-overlay" id="settingsModal">
       <div class="modal" id="settingsModalContent" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
         <div class="modal-header">
           <h2 id="settingsTitle">Settings</h2>

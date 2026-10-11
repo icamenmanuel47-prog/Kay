@@ -420,6 +420,17 @@ a:focus-visible,
   display: none !important;
 }
 
+/* The renderer toggles the `hidden` *attribute* on the welcome screen,
+   messages container, typing indicator and image preview bar. The UA rule
+   that honours `[hidden]` is origin-defeated by any author rule that sets
+   `display` on the same element - and `.welcome-screen`, `.messages-container`,
+   `.typing-indicator` and `.image-preview-bar` all set `display:flex`. The
+   attribute was therefore silently ignored and those elements never hid.
+   One global rule restores the behaviour HTML promises. */
+[hidden] {
+  display: none !important;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
