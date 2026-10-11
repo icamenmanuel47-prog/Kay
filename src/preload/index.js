@@ -74,7 +74,7 @@ contextBridge.exposeInMainWorld('kayAPI', {
     return () => ipcRenderer.removeListener('chat:stream-end', handler);
   },
   onStreamError: (callback) => {
-    const handler = (_, error) => callback(error);
+    const handler = (_, error, conversationId) => callback(error, conversationId);
     ipcRenderer.on('chat:stream-error', handler);
     return () => ipcRenderer.removeListener('chat:stream-error', handler);
   },

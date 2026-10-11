@@ -17,10 +17,14 @@ function setupOpenRouter() {
   ipcMain.on('chat:stream', (_, conversationId, message, images, model, systemPrompt) => {
     const apiKey = getApiKey();
     if (!apiKey) {
-      // Send error via event
+      // The renderer already rendered the message optimistically, and main is
+      // the only process that writes messages to disk - so persist it here or
+      // it silently disappears on the next reload.
+      require('./conversations').addMessage(conversationId, { role: 'user', content: message, images });
+
       const win = require('./window').getWindow();
       if (win) {
-        win.webContents.send('chat:stream-error', 'API key not set. Please configure in Settings.');
+        win.webContents.send('chat:stream-error', 'API key not set. Please configure in Settings.', conversationId);
       }
       return;
     }
@@ -29,7 +33,8 @@ function setupOpenRouter() {
     if (abortController) {
       abortController.abort();
     }
-    abortController = new AbortController();
+    const controller = new AbortController();
+    abortController = controller;
 
     // The aborted stream's catch handler still runs afterwards. Tagging each
     // stream lets a superseded one recognise that it no longer owns the
@@ -41,7 +46,7 @@ function setupOpenRouter() {
     // about to append.
     require('./conversations').cancelPendingAssistantUpdate(conversationId);
 
-    streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, abortController.signal, streamId);
+    streamChatCompletion(conversationId, message, images, model, systemPrompt, apiKey, controller.signal, streamId);
   });
 
   // Cancel streaming
@@ -248,7 +253,7 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     } else {
       console.error('Stream error:', error);
       if (win) {
-        win.webContents.send('chat:stream-error', error.message);
+        win.webContents.send('chat:stream-error', error.message, conversationId);
       }
       if (fullContent) {
         // Keep whatever did arrive instead of dropping it on the floor, which
@@ -264,7 +269,12 @@ async function streamChatCompletion(conversationId, message, images, model, syst
     if (isCurrent()) {
       flushPendingAssistantUpdates(conversationId);
     }
-    abortController = null;
+    // Only clear the module-level controller if it is still *this* stream's.
+    // A superseded stream's finally used to null it unconditionally, dropping
+    // the live stream's AbortController and making cancel/supersede no-ops.
+    if (abortController && abortController.signal === signal) {
+      abortController = null;
+    }
   }
 }
 
