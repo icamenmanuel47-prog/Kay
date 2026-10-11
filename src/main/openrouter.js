@@ -457,5 +457,9 @@ async function fetchModels() {
 module.exports = {
   setupOpenRouter,
   fetchModels,
+  // Exported for tests: both are pure functions that decide what actually
+  // reaches the network.
+  buildRequestWithHistory,
+  validateStreamArgs,
   OPENROUTER_BASE,
 };

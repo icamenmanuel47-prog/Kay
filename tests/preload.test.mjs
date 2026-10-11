@@ -109,3 +109,44 @@ test('Preload: every kayAPI method the renderer calls is really exposed', () => 
   assert.deepEqual(missing, [], 'renderer calls kayAPI methods the preload does not expose');
 });
 
+test('Preload: listener allowlist matches channels main actually sends', () => {
+  const preloadCode = fs.readFileSync(PRELOAD_PATH, 'utf8');
+
+  // The preload's removeAllListeners()/onUpdaterEvent() are restricted to
+  // LISTENER_CHANNELS. An entry that main never sends is a silent dead
+  // subscription; a channel main sends that is missing from the list can
+  // never be detached. Catch both directions.
+  const listBlock = preloadCode.match(/const LISTENER_CHANNELS = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(listBlock, 'preload should declare LISTENER_CHANNELS');
+
+  const allowed = new Set(
+    [...listBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1]),
+  );
+  assert.ok(allowed.size > 0);
+
+  const sent = new Set();
+  for (const file of jsFilesIn(MAIN_DIR)) {
+    const source = fs.readFileSync(path.join(MAIN_DIR, file), 'utf8');
+    // Skip prefix literals like `'updater:' + event` - handled below.
+    for (const match of source.matchAll(/sendToRenderer\(\s*'([^']+)'/g)) {
+      if (!match[1].endsWith(':')) sent.add(match[1]);
+    }
+    for (const match of source.matchAll(/webContents\.send\(\s*'([^']+)'/g)) {
+      sent.add(match[1]);
+    }
+  }
+  // updater.js builds its channel as 'updater:' + event.
+  for (const event of ['checking', 'available', 'not-available', 'error', 'progress', 'downloaded']) {
+    sent.add(`updater:${event}`);
+  }
+
+  const deadEntries = [...allowed].filter((channel) => !sent.has(channel)).sort();
+  assert.deepEqual(deadEntries, [],
+    'LISTENER_CHANNELS contains channels nothing in main ever sends');
+
+  // Anything main sends that the preload cannot subscribe to is unreachable.
+  const unreachable = [...sent].filter((channel) => !allowed.has(channel)).sort();
+  assert.deepEqual(unreachable, [],
+    'main sends channels the preload listener allowlist does not cover');
+});
+
