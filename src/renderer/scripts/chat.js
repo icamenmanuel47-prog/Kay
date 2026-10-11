@@ -3,7 +3,7 @@
  * Handles message rendering, streaming, input handling, image paste/upload, model selection
  */
 
-import { $, $$, createElement, clearElement, formatDate, parseHotkey, compressImage, createImagePreview, showToast, debounce } from './utils.js';
+import { $, $$, createElement, clearElement, formatDate, parseHotkey, compressImage, createImagePreview, showToast, debounce, copyToClipboard } from './utils.js';
 import { renderMarkdownToElement, rerenderMarkdownInElement } from './markdown.js';
 
 // kayAPI is exposed via contextBridge on window object by preload
@@ -226,7 +226,14 @@ function bindEvents() {
 
   // Conversation selection
   window.addEventListener('conversation:selected', (e) => loadConversation(e.detail.conversationId));
-  window.addEventListener('conversation:deleted', () => showWelcomeScreen());
+  window.addEventListener('conversation:deleted', (e) => {
+    // Forget the deleted conversation, otherwise the next send posts to an
+    // id that no longer exists on disk instead of creating a new one.
+    if (e.detail?.id === currentConversationId) {
+      currentConversationId = null;
+    }
+    showWelcomeScreen();
+  });
 
   // Settings changes
   kayAPI.onSettingsChanged(handleSettingsChange);
@@ -743,29 +750,44 @@ function handleStreamChunk(data) {
 }
 
 function handleStreamEnd(data) {
-  if (data.conversationId !== currentConversationId) return;
+  // Reset streaming state *before* the conversation check. A stream that ends
+  // while the user is viewing a different conversation used to return early
+  // with isStreaming still true, permanently disabling the send button.
+  if (data.conversationId === currentConversationId) {
+    // Find assistant message and finalize
+    const assistantMsg = elements.messages?.lastElementChild;
+    if (assistantMsg && assistantMsg.dataset.role === 'assistant') {
+      const contentEl = assistantMsg.querySelector('.message-text');
+      if (contentEl && data.content) {
+        contentEl.dataset.rawContent = data.content;
+        renderMarkdownToElement(data.content, contentEl);
+      }
 
+      // Add metadata
+      addMessageMeta(assistantMsg, data.canceled);
+    }
+
+    scrollToBottom();
+  }
+
+  // Only one stream can be live at a time (main aborts the previous one when
+  // a new message arrives), so any stream-end means nothing is streaming now.
   isStreaming = false;
   hideTypingIndicator();
   updateSendButtonState();
-
-  // Find assistant message and finalize
-  const assistantMsg = elements.messages?.lastElementChild;
-  if (assistantMsg && assistantMsg.dataset.role === 'assistant') {
-    const contentEl = assistantMsg.querySelector('.message-text');
-    if (contentEl && data.content) {
-      contentEl.dataset.rawContent = data.content;
-      renderMarkdownToElement(data.content, contentEl);
-    }
-
-    // Add metadata
-    addMessageMeta(assistantMsg, data.canceled);
-  }
-
-  scrollToBottom();
 }
 
-function handleStreamError(error) {
+function handleStreamError(error, conversationId) {
+  // An error for a conversation the user is not currently viewing must not
+  // touch the visible one - it used to delete the last assistant message of
+  // whatever conversation was on screen and inject an error bubble into it.
+  if (conversationId && conversationId !== currentConversationId) {
+    isStreaming = false;
+    updateSendButtonState();
+    showToast(typeof error === 'string' ? error : 'A background message failed', 'error');
+    return;
+  }
+
   isStreaming = false;
   hideTypingIndicator();
   updateSendButtonState();
@@ -980,7 +1002,13 @@ async function regenerateLastResponse() {
 // Conversation Loading
 // ============================================================================
 
+// Monotonic token so a slow load cannot render over a newer one (rapid
+// conversation switching), and so an auto-created conversation's load does
+// not wipe the optimistic first message.
+let loadToken = 0;
+
 async function loadConversation(conversationId) {
+  const token = ++loadToken;
   currentConversationId = conversationId;
 
   // Clear current messages
@@ -989,6 +1017,8 @@ async function loadConversation(conversationId) {
 
   try {
     const result = await kayAPI.conversations.get(conversationId);
+    if (token !== loadToken) return; // superseded by a newer load
+
     if (result.conversation) {
       const conv = result.conversation;
 
@@ -1001,6 +1031,12 @@ async function loadConversation(conversationId) {
         });
 
         scrollToBottom();
+      } else if (isStreaming && currentConversationId === conversationId) {
+        // Sending into a freshly created conversation triggers this load
+        // before main has persisted the user's message, so the stored list is
+        // still empty. Clearing here would wipe the just-rendered bubble.
+        elements.welcomeScreen?.setAttribute('hidden', '');
+        elements.messagesContainer?.removeAttribute('hidden');
       } else {
         showWelcomeScreen();
       }
@@ -1009,6 +1045,7 @@ async function loadConversation(conversationId) {
       showWelcomeScreen();
     }
   } catch (error) {
+    if (token !== loadToken) return;
     console.error('[Chat] Load conversation failed:', error);
     showToast('Failed to load conversation', 'error');
     showWelcomeScreen();

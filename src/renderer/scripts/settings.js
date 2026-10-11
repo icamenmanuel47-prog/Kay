@@ -3,7 +3,7 @@
  * Handles settings modal: tabs, forms, API key, hotkey recorder, theme, opacity
  */
 
-import { $, $$, createElement, clearElement, parseHotkey, showToast, copyToClipboard } from './utils.js';
+import { $, $$, createElement, clearElement, parseHotkey, showToast } from './utils.js';
 
 // kayAPI is exposed via contextBridge on window object by preload
 const kayAPI = window.kayAPI;
