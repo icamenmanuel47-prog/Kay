@@ -1,5 +1,37 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Channels this bridge is allowed to subscribe to / detach. Anything else is
+// refused: without a list, removeAllListeners() and onUpdaterEvent() were
+// open-ended primitives over every channel in the app.
+const LISTENER_CHANNELS = new Set([
+  'chat:stream-chunk',
+  'chat:stream-end',
+  'chat:stream-error',
+  'chat:models',
+  'settings:changed',
+  'hotkey:changed',
+  'conversations:list-changed',
+  'open-settings',
+  'app:state-changed',
+  'window:shown',
+  'window:hidden',
+  'updater:checking',
+  'updater:available',
+  'updater:not-available',
+  'updater:error',
+  'updater:progress',
+  'updater:downloaded',
+]);
+
+const UPDATER_EVENTS = new Set([
+  'checking',
+  'available',
+  'not-available',
+  'error',
+  'progress',
+  'downloaded',
+]);
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('kayAPI', {
@@ -119,12 +151,26 @@ contextBridge.exposeInMainWorld('kayAPI', {
     return () => ipcRenderer.removeListener('window:hidden', handler);
   },
   onUpdaterEvent: (event, callback) => {
+    // The channel is derived from a caller-supplied string, so restrict it to
+    // the events main actually emits - otherwise this is a general-purpose
+    // subscribe-to-any-channel primitive handed to the page.
+    if (!UPDATER_EVENTS.has(event)) {
+      console.warn(`[Preload] Ignoring subscription to unknown updater event: ${String(event).slice(0, 40)}`);
+      return () => {};
+    }
     const channel = `updater:${event}`;
     const handler = (_, data) => callback(data);
     ipcRenderer.on(channel, handler);
     return () => ipcRenderer.removeListener(channel, handler);
   },
 
-  // Remove listeners
-  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
+  // Remove listeners - restricted to the channels this bridge owns, so the
+  // page cannot detach handlers it was never given.
+  removeAllListeners: (channel) => {
+    if (LISTENER_CHANNELS.has(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    } else {
+      console.warn(`[Preload] Ignoring removeAllListeners for unknown channel: ${String(channel).slice(0, 40)}`);
+    }
+  },
 });

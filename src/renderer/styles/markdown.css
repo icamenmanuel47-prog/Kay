@@ -213,25 +213,30 @@
   border-radius: 0;
 }
 
-/* Syntax Highlighting (atom-one-dark theme compatible) */
+/* Syntax Highlighting - light (GitHub light) palette.
+ *
+ * This used to be atom-one-dark applied unconditionally, so in the light
+ * theme code appeared as #abb2bf grey text on the light --bg-tertiary
+ * background - effectively unreadable. The dark palette now lives under
+ * [data-theme="dark"] further down the file. */
 .message-text .hljs {
   display: block;
   overflow-x: auto;
   padding: 16px;
   background: transparent !important;
-  color: #abb2bf;
+  color: #1f2328;
 }
 
 .message-text .hljs-comment,
 .message-text .hljs-quote {
-  color: #5c6370;
+  color: #6e7781;
   font-style: italic;
 }
 
 .message-text .hljs-keyword,
 .message-text .hljs-selector-tag,
 .message-text .hljs-subst {
-  color: #c678dd;
+  color: #cf222e;
 }
 
 .message-text .hljs-number,
@@ -239,61 +244,61 @@
 .message-text .hljs-variable,
 .message-text .hljs-template-variable,
 .message-text .hljs-tag .hljs-attr {
-  color: #d19a66;
+  color: #0550ae;
 }
 
 .message-text .hljs-string,
 .message-text .hljs-doctag {
-  color: #98c379;
+  color: #0a3069;
 }
 
 .message-text .hljs-title,
 .message-text .hljs-section,
 .message-text .hljs-selector-id {
-  color: #e06c75;
+  color: #8250df;
   font-weight: 600;
 }
 
 .message-text .hljs-subst {
-  color: #abb2bf;
+  color: #1f2328;
 }
 
 .message-text .hljs-type,
 .message-text .hljs-class .hljs-title {
-  color: #e5c07b;
+  color: #953800;
 }
 
 .message-text .hljs-tag,
 .message-text .hljs-name,
 .message-text .hljs-attribute {
-  color: #e06c75;
+  color: #116329;
 }
 
 .message-text .hljs-regexp,
 .message-text .hljs-link {
-  color: #56b6c2;
+  color: #0a3069;
 }
 
 .message-text .hljs-symbol,
 .message-text .hljs-bullet {
-  color: #c678dd;
+  color: #0550ae;
 }
 
 .message-text .hljs-built_in,
 .message-text .hljs-builtin-name {
-  color: #d19a66;
+  color: #953800;
 }
 
 .message-text .hljs-meta {
-  color: #5c6370;
+  color: #57606a;
 }
 
 .message-text .hljs-deletion {
-  background: rgba(224, 108, 117, 0.1);
+  background: rgba(248, 81, 73, 0.15);
 }
 
 .message-text .hljs-addition {
-  background: rgba(152, 195, 121, 0.1);
+  background: rgba(54, 180, 80, 0.15);
 }
 
 .message-text .hljs-emphasis {
@@ -704,6 +709,16 @@
 [data-theme="dark"] .message-text .hljs-meta {
   color: #5c6370;
 }
+
+[data-theme="dark"] .message-text .hljs-deletion {
+  background: rgba(224, 108, 117, 0.15);
+}
+
+[data-theme="dark"] .message-text .hljs-addition {
+  background: rgba(152, 195, 121, 0.15);
+}
+
+/* emphasis/strong are font-style only, so they are shared with light. */
 
 /* ==========================================================================
    High Contrast Mode Support

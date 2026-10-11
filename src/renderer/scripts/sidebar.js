@@ -76,8 +76,18 @@ function bindEvents() {
     });
   }
 
-  // Listen for conversation list changes from main process
-  kayAPI.onConversationListChanged(() => loadConversations());
+  // Listen for conversation list changes from main process. If the user is
+  // mid-search, re-run their query instead of clobbering the filtered view
+  // with the full list - which is what used to happen the moment any
+  // conversation was created or a stream finished.
+  kayAPI.onConversationListChanged(() => {
+    const query = elements.search?.value?.trim() || '';
+    if (query) {
+      handleSearch(query);
+    } else {
+      loadConversations();
+    }
+  });
 
   // Listen for settings changes (might affect theme, etc.)
   kayAPI.onSettingsChanged(() => renderConversations());
@@ -88,8 +98,10 @@ function bindEvents() {
 // ============================================================================
 
 async function loadConversations() {
+  const token = ++searchToken; // invalidate any in-flight search
   try {
     const result = await kayAPI.conversations.list();
+    if (token !== searchToken) return;
     if (result.conversations) {
       conversations = result.conversations;
       renderConversations();
@@ -180,7 +192,13 @@ function escapeHtml(text) {
 // Search
 // ============================================================================
 
+// Monotonic token so a slow search response cannot overwrite the results of
+// a newer one - the debounce alone does not prevent overlapping in-flight
+// requests.
+let searchToken = 0;
+
 async function handleSearch(query) {
+  const token = ++searchToken;
   const trimmed = query.trim();
 
   if (!trimmed) {
@@ -194,11 +212,13 @@ async function handleSearch(query) {
 
   try {
     const result = await kayAPI.conversations.search(trimmed);
+    if (token !== searchToken) return; // superseded by a newer search
     if (result.conversations) {
       conversations = result.conversations;
       renderConversations();
     }
   } catch (error) {
+    if (token !== searchToken) return;
     console.error('[Sidebar] Search failed:', error);
   }
 }

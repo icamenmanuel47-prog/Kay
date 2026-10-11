@@ -23,6 +23,10 @@ let favoritesCache = [];
 let abortController = null;
 let messageCounter = 0;
 
+// Streaming renders are rate-limited; see handleStreamChunk.
+const STREAM_RENDER_INTERVAL_MS = 100;
+let lastStreamRenderAt = 0;
+
 // ============================================================================
 // DOM Elements
 // ============================================================================
@@ -277,6 +281,11 @@ async function loadModels() {
       modelsCache = result.models;
       filterModels();
     }
+    // Main reports why the list came back empty. Without this the picker
+    // just stayed blank with no indication anything had failed.
+    if (result.error) {
+      showToast(result.error, 'error');
+    }
   } catch (error) {
     console.error('[Chat] Failed to load models:', error);
   }
@@ -344,12 +353,17 @@ function renderModelList(models) {
           <span>${model.contextLength ? `${(model.contextLength / 1000).toFixed(0)}k ctx` : ''}</span>
         </div>
       </div>
-      <button class="model-item-favorite" aria-label="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}" data-model-id="${model.id}">
+      <button class="model-item-favorite" aria-label="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
         <svg viewBox="0 0 24 24" fill="${isFavorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
       </button>
     `;
+
+    // Set via the DOM, never interpolated into the markup above: the id comes
+    // from the API, and string interpolation there would allow an attribute
+    // breakout (" onmouseover=...) to inject markup into the picker.
+    item.querySelector('.model-item-favorite')?.setAttribute('data-model-id', model.id);
 
     // Click to select model
     item.addEventListener('click', (e) => {
@@ -721,6 +735,7 @@ async function sendMessage() {
 
   // Start streaming
   isStreaming = true;
+  lastStreamRenderAt = 0; // first chunk of a new stream renders immediately
   updateSendButtonState();
 
   try {
@@ -757,8 +772,18 @@ function handleStreamChunk(data) {
   // Update content
   const contentEl = assistantMsg.querySelector('.message-text');
   if (contentEl) {
-    contentEl.dataset.rawContent = (contentEl.dataset.rawContent || '') + data.chunk;
-    renderMarkdownToElement(contentEl.dataset.rawContent, contentEl);
+    const raw = (contentEl.dataset.rawContent || '') + data.chunk;
+    contentEl.dataset.rawContent = raw;
+
+    // Re-rendering the markdown on every single token is O(message length),
+    // so a long response did quadratic work and visibly stuttered. Render at
+    // most ~10x/second during the stream; handleStreamEnd does the final
+    // authoritative render.
+    const now = performance.now();
+    if (now - lastStreamRenderAt >= STREAM_RENDER_INTERVAL_MS) {
+      lastStreamRenderAt = now;
+      renderMarkdownToElement(raw, contentEl);
+    }
   }
 
   // Scroll to bottom

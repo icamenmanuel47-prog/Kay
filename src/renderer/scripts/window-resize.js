@@ -16,6 +16,8 @@ let startX = 0;
 let startY = 0;
 let startWidth = 0;
 let startHeight = 0;
+let lastWidth = 0;
+let lastHeight = 0;
 let resizeHandle = null;
 let rafId = null;
 
@@ -72,22 +74,27 @@ async function startResize(clientX, clientY) {
   startX = clientX;
   startY = clientY;
 
+  // Attach the document-level listeners before awaiting anything below: if
+  // the user moves the mouse while the bounds IPC is in flight, the drag must
+  // already be tracked (it used to compute against startWidth/startHeight of
+  // 0, which snapped the window to its minimum size).
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('touchmove', onTouchMove, { passive: false });
+  document.addEventListener('touchend', onTouchEnd);
+
   // Get current window bounds
   try {
     const bounds = await kayAPI.window.getBounds();
     if (bounds) {
       startWidth = bounds.width;
       startHeight = bounds.height;
+      lastWidth = bounds.width;
+      lastHeight = bounds.height;
     }
   } catch (error) {
     console.error('[WindowResize] Failed to get window bounds:', error);
   }
-
-  // Add document-level listeners
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('mouseup', onMouseUp);
-  document.addEventListener('touchmove', onTouchMove, { passive: false });
-  document.addEventListener('touchend', onTouchEnd);
 
   // Prevent text selection during resize
   document.body.style.userSelect = 'none';
@@ -127,14 +134,15 @@ function resizeWindow(clientX, clientY) {
   const deltaX = clientX - startX;
   const deltaY = clientY - startY;
 
-  let newWidth = Math.max(MIN_WIDTH, startWidth + deltaX);
-  let newHeight = Math.max(MIN_HEIGHT, startHeight + deltaY);
+  lastWidth = Math.max(MIN_WIDTH, startWidth + deltaX);
+  lastHeight = Math.max(MIN_HEIGHT, startHeight + deltaY);
 
   // Throttle IPC calls with requestAnimationFrame
   if (rafId) cancelAnimationFrame(rafId);
 
   rafId = requestAnimationFrame(() => {
-    kayAPI.window.setBounds({ width: newWidth, height: newHeight });
+    rafId = null;
+    kayAPI.window.setBounds({ width: lastWidth, height: lastHeight }).catch(() => {});
   });
 }
 
@@ -160,10 +168,15 @@ function endResize() {
 
   isResizing = false;
 
-  // Cancel any pending RAF
+  // Cancel any pending RAF, but apply the final size first: dropping it
+  // silently lost the last position of the drag whenever the mouse was
+  // released between frames, leaving the window at a stale size.
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
+  }
+  if (lastWidth > 0 && lastHeight > 0) {
+    kayAPI.window.setBounds({ width: lastWidth, height: lastHeight }).catch(() => {});
   }
 
   // Remove document-level listeners

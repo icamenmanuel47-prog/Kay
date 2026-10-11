@@ -335,7 +335,23 @@ function populateModelSelect(selectedModel) {
   // the chat picker uses.
   kayAPI.chat.getModels().then(result => {
     const models = result?.models || [];
-    if (models.length === 0) return; // keep whatever is currently selected
+
+    if (models.length === 0) {
+      // Offline (or the list has not loaded yet): fall back to showing the
+      // saved default so the control is never a blank, meaningless box.
+      const saved = selectedModel || currentSettings?.defaultModel;
+      clearElement(elements.defaultModelSelect);
+      if (saved) {
+        elements.defaultModelSelect.appendChild(
+          createElement('option', { value: saved }, saved)
+        );
+        elements.defaultModelSelect.value = saved;
+      }
+      if (result?.error) {
+        showToast(`${result.error} - showing saved value only`, 'warning');
+      }
+      return;
+    }
 
     const previous = selectedModel || elements.defaultModelSelect.value;
     clearElement(elements.defaultModelSelect);
@@ -351,6 +367,7 @@ function populateModelSelect(selectedModel) {
     if (previous) elements.defaultModelSelect.value = previous;
   }).catch(error => {
     console.error('[Settings] Model list unavailable:', error);
+    showToast('Could not load the model list', 'error');
   });
 }
 
