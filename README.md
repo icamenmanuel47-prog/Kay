@@ -23,16 +23,16 @@ models — including free ones — and switch mid-conversation.
 
 ## Requirements
 
-- Node.js 18+ (20+ recommended)
+- Node.js 22+ (Node 20 reached end of life in April 2026; Electron 44 bundles Node 22.x)
 - Windows x64 (the packaged target is NSIS)
 - An [OpenRouter API key](https://openrouter.ai/keys)
 
 ## Getting started
 
 ```bash
-npm install     # also rebuilds native deps for Electron via postinstall
-npm start       # launch the app
-npm run dev     # launch with DevTools open
+npm install       # uiohook-napi ships prebuilds, so no compiler toolchain is needed
+npm start         # launch the app
+npm run dev       # launch with DevTools open
 ```
 
 On first launch, open **Settings** and paste your OpenRouter API key. It is encrypted
@@ -45,9 +45,16 @@ renderer.
 npm test
 ```
 
-Runs `node --test` against `tests/*.test.mjs` — no Electron or network required.
-Covered: Markdown/LaTeX rendering, DOMPurify XSS handling, multi-turn request
-building and history capping, settings defaults, and the preload API contract.
+Runs `node --test` — no Electron, network, or display required (the Electron API is
+stubbed in `tests/helpers/electron-shim.mjs`).
+
+109 tests cover the real modules rather than reimplementations of them:
+conversation persistence (auto-titling, preview, streaming writes, path-traversal
+ids, corrupt files), settings (API-key encryption and renderer masking, coalesced
+change notifications), OpenRouter request building and `chat:stream` argument
+validation, the pure logic behind hotkeys, navigation classification and throttling,
+Markdown/LaTeX rendering with sanitization, and a contract test that the preload API
+matches what the renderer calls and what the main process sends.
 
 ## Packaging
 
@@ -57,6 +64,26 @@ npm run dist    # NSIS installer into dist/
 ```
 
 Build configuration lives in [`electron-builder.json`](electron-builder.json).
+
+### Releases and updates
+
+Pushing a `v*` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which builds the installer and publishes it to a GitHub Release:
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+A packaged build reads that release feed (via the generated `app-update.yml`) and
+updates itself: **Settings → Check for Updates** downloads in the background, and the
+update installs the next time you quit Kay. Update checks only work from an installed
+build — running `npm start` from source has no update feed and says so.
+
+> **SmartScreen warning.** Builds are **unsigned** — no code-signing certificate is
+> configured. Windows will therefore show "Windows protected your PC" on first run of
+> the installer. Choose **More info → Run anyway**. This is expected for unsigned
+> software, not a sign of tampering; signing removes it.
 
 ## Project layout
 
@@ -72,14 +99,18 @@ src/
     openrouter.js  OpenRouter chat completions, streaming, model list
     ipc.js         IPC handler registration
     updater.js     electron-updater wiring
+    hotkey-logic.js, navigation.js, throttle.js, conversation-fields.js
+                   pure helpers (no Electron imports, unit-tested directly)
   preload/
     index.js       contextBridge — the only surface the renderer can touch
   renderer/
     index.html
     scripts/       app, chat, sidebar, settings, markdown, utils, window-resize
     styles/        main, components, markdown
-    vendor/        marked, DOMPurify, KaTeX, highlight.js (bundled for offline use)
-tests/           node --test suites
+    vendor/        marked, DOMPurify, KaTeX, highlight.js (bundled for offline use;
+                   the npm copies of these are test-only dependencies)
+tests/           node --test suites (+ helpers/electron-shim.mjs)
+.github/workflows/  CI (cross-platform tests + packaging) and Release (tag -> GitHub Release)
 build/           icon and installer assets
 ```
 
